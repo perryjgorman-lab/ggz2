@@ -5,9 +5,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform
 } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { apiService } from '../src/services/api';
 import { ManualSearchModal } from '../src/components';
@@ -26,11 +28,30 @@ export default function ScanScreen() {
     }
   }, [permission]);
 
+  const triggerHaptic = async (type: 'success' | 'error' | 'scan') => {
+    if (Platform.OS !== 'ios') return;
+
+    switch (type) {
+      case 'success':
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        break;
+      case 'error':
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        break;
+      case 'scan':
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        break;
+    }
+  };
+
   const handleBarCodeScanned = async (result: BarcodeScanningResult) => {
     if (scanned || loading) return;
 
     const { data: barcode, type } = result;
     console.log(`Scanned barcode: ${barcode} (type: ${type})`);
+
+    // Haptic feedback when barcode is detected
+    await triggerHaptic('scan');
 
     setScanned(true);
     setLoading(true);
@@ -43,6 +64,7 @@ export default function ScanScreen() {
       });
 
       if (productResult.success && productResult.product) {
+        await triggerHaptic('success');
         router.replace({
           pathname: '/product',
           params: {
@@ -51,6 +73,7 @@ export default function ScanScreen() {
           }
         });
       } else {
+        await triggerHaptic('error');
         setLastError(productResult.error || 'Product not found');
         Alert.alert(
           'Product Not Found',
@@ -77,6 +100,7 @@ export default function ScanScreen() {
         );
       }
     } catch (error) {
+      await triggerHaptic('error');
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       setLastError(errorMessage);
@@ -106,6 +130,7 @@ export default function ScanScreen() {
       const result = await apiService.searchProductByName(productName);
 
       if (result.success && result.product) {
+        await triggerHaptic('success');
         router.replace({
           pathname: '/product',
           params: {
@@ -114,10 +139,12 @@ export default function ScanScreen() {
           }
         });
       } else {
+        await triggerHaptic('error');
         Alert.alert('Search Failed', result.error || 'Could not find product');
         setScanned(false);
       }
     } catch (error) {
+      await triggerHaptic('error');
       Alert.alert(
         'Error',
         error instanceof Error ? error.message : 'Search failed'
@@ -189,6 +216,10 @@ export default function ScanScreen() {
           <View style={styles.middleContainer}>
             <View style={styles.unfocusedContainer} />
             <View style={styles.focusedContainer}>
+              <View style={styles.cornerTL} />
+              <View style={styles.cornerTR} />
+              <View style={styles.cornerBL} />
+              <View style={styles.cornerBR} />
               {loading && (
                 <View style={styles.loadingOverlay}>
                   <ActivityIndicator size="large" color="#fff" />
@@ -214,6 +245,7 @@ export default function ScanScreen() {
                 <TouchableOpacity
                   style={styles.rescanButton}
                   onPress={() => {
+                    triggerHaptic('scan');
                     setScanned(false);
                     setLastError(null);
                   }}
@@ -224,7 +256,10 @@ export default function ScanScreen() {
 
               <TouchableOpacity
                 style={styles.manualSearchButton}
-                onPress={() => setShowManualSearch(true)}
+                onPress={() => {
+                  triggerHaptic('scan');
+                  setShowManualSearch(true);
+                }}
               >
                 <Text style={styles.manualSearchButtonText}>
                   Enter Product Name
@@ -258,7 +293,7 @@ const styles = StyleSheet.create({
   },
   unfocusedContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)'
+    backgroundColor: 'rgba(0,0,0,0.6)'
   },
   middleContainer: {
     flexDirection: 'row',
@@ -266,22 +301,66 @@ const styles = StyleSheet.create({
   },
   focusedContainer: {
     flex: 6,
-    borderWidth: 2,
-    borderColor: '#1a73e8',
-    borderRadius: 8,
+    position: 'relative',
     justifyContent: 'center',
     alignItems: 'center'
   },
+  // iOS-style corner brackets
+  cornerTL: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 40,
+    height: 40,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderColor: '#1a73e8',
+    borderTopLeftRadius: 12
+  },
+  cornerTR: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 40,
+    height: 40,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+    borderColor: '#1a73e8',
+    borderTopRightRadius: 12
+  },
+  cornerBL: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: 40,
+    height: 40,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+    borderColor: '#1a73e8',
+    borderBottomLeftRadius: 12
+  },
+  cornerBR: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 40,
+    height: 40,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderColor: '#1a73e8',
+    borderBottomRightRadius: 12
+  },
   loadingOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.8)',
     padding: 24,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center'
   },
   loadingText: {
     color: '#fff',
     marginTop: 12,
-    fontSize: 14
+    fontSize: 15,
+    fontWeight: '500'
   },
   instructions: {
     alignItems: 'center',
@@ -289,11 +368,11 @@ const styles = StyleSheet.create({
   },
   instructionsText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '500'
+    fontSize: 17,
+    fontWeight: '600'
   },
   errorText: {
-    color: '#ef4444',
+    color: '#ff6b6b',
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
@@ -307,23 +386,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a73e8',
     paddingHorizontal: 32,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     marginBottom: 12
   },
   rescanButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600'
   },
   manualSearchButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8
+    borderRadius: 10
   },
   manualSearchButtonText: {
     color: '#fff',
-    fontSize: 14
+    fontSize: 15,
+    fontWeight: '500'
   },
   permissionBox: {
     flex: 1,
@@ -333,7 +413,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc'
   },
   permissionTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: '#1e293b',
     marginBottom: 12
@@ -342,18 +422,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#64748b',
     textAlign: 'center',
-    marginBottom: 24
+    marginBottom: 24,
+    lineHeight: 22
   },
   permissionButton: {
     backgroundColor: '#1a73e8',
     paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 14,
     marginBottom: 16
   },
   permissionButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600'
   },
   manualButton: {
@@ -361,6 +442,7 @@ const styles = StyleSheet.create({
   },
   manualButtonText: {
     color: '#1a73e8',
-    fontSize: 14
+    fontSize: 15,
+    fontWeight: '500'
   }
 });

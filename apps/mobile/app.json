@@ -17,8 +17,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.scan2market.app",
+      "buildNumber": "1",
       "infoPlist": {
-        "NSCameraUsageDescription": "Scan2Market needs camera access to scan product barcodes."
+        "NSCameraUsageDescription": "Scan2Market needs camera access to scan product barcodes and identify products for price estimation.",
+        "NSPhotoLibraryUsageDescription": "Scan2Market may need photo library access to save product images.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
@@ -31,14 +37,28 @@
         "android.permission.CAMERA"
       ]
     },
-    "web": {
-      "favicon": "./assets/favicon.png",
-      "bundler": "metro"
-    },
-    "scheme": "scan2market",
     "plugins": [
-      "expo-camera",
-      "expo-router"
-    ]
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan2Market needs camera access to scan product barcodes."
+        }
+      ],
+      "expo-router",
+      "expo-haptics"
+    ],
+    "scheme": "scan2market",
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
+    },
+    "owner": "your-expo-username",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/your-project-id"
+    }
   }
 }
