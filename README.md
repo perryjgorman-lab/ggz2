@@ -1,35 +1,35 @@
 # Scan2Market
 
-A native iOS app to scan product barcodes (UPC/EAN) and get estimated resale prices from marketplaces.
+A cross-platform mobile app (iOS & Android) to scan product barcodes (UPC/EAN) and get estimated resale prices from marketplaces.
 
 ## Features
 
-- **Barcode Scanning**: Native iOS camera integration with haptic feedback
+- **Barcode Scanning**: Native camera integration with haptic feedback on both platforms
 - **Product Lookup**: Automatic product identification via UPCitemdb and Open Food Facts
 - **Price Estimation**: Get estimated resale prices from eBay and other marketplaces
 - **Price Confidence Indicator**: See how reliable the price estimate is (High/Medium/Low) based on:
   - Number of comparable listings found
   - Recency of listings
   - Price spread/variance
-- **Facebook Marketplace Integration**: Compliant search via Safari (user-assisted flow)
+- **Facebook Marketplace Integration**: Compliant search via browser (user-assisted flow)
 - **Manual Search Fallback**: Enter product name when barcode lookup fails
 - **Scan History**: View previously scanned items and re-check prices
 - **Location-based Pricing**: Enter ZIP code for local marketplace results
-- **iOS Native Features**: Haptic feedback, native alerts, iOS-style UI
+- **Cross-Platform**: Runs natively on iOS and Android
 
 ## Project Structure
 
 ```
 scan2market/
 ├── apps/
-│   └── mobile/          # Expo React Native iOS app
+│   └── mobile/          # Expo React Native app (iOS & Android)
 │       ├── app/         # expo-router screens
 │       ├── src/
 │       │   ├── components/
 │       │   ├── services/
 │       │   └── types/
 │       ├── assets/
-│       ├── app.json     # Expo/iOS configuration
+│       ├── app.json     # Expo configuration
 │       └── eas.json     # EAS Build configuration
 ├── services/
 │   └── api/             # Node.js Express backend
@@ -45,13 +45,20 @@ scan2market/
 
 - Node.js 18+
 - npm 9+
-- macOS with Xcode 15+ (for iOS development)
-- iOS Simulator or physical iPhone/iPad
 - Expo CLI: `npm install -g expo-cli`
 - EAS CLI (for builds): `npm install -g eas-cli`
+
+**For iOS:**
+- macOS with Xcode 15+
+- iOS Simulator or physical iPhone/iPad
 - Apple Developer Account (for device testing/App Store)
 
-## Quick Start (iOS Development)
+**For Android:**
+- Android Studio with SDK
+- Android Emulator or physical Android device
+- Google Play Developer Account (for Play Store)
+
+## Quick Start
 
 ### 1. Clone and Install
 
@@ -78,19 +85,9 @@ cp .env.example .env
 # Example: EXPO_PUBLIC_API_URL=http://192.168.1.100:3001
 ```
 
-### 3. Run on iOS
+### 3. Run the Application
 
-**Option A: iOS Simulator (Quick Start)**
-```bash
-# Terminal 1: Start backend
-npm run dev:api
-
-# Terminal 2: Start Expo and open iOS Simulator
-cd apps/mobile
-npm run ios
-```
-
-**Option B: Physical iPhone (Recommended for camera testing)**
+**Start Backend + Mobile (both platforms):**
 ```bash
 # Terminal 1: Start backend
 npm run dev:api
@@ -98,78 +95,101 @@ npm run dev:api
 # Terminal 2: Start Expo
 cd apps/mobile
 npm start
-
-# Scan QR code with Camera app or Expo Go app on iPhone
+# Then press 'i' for iOS or 'a' for Android
 ```
 
-**Option C: Development Build (Full native features)**
+**iOS Simulator:**
 ```bash
-# Install EAS CLI
-npm install -g eas-cli
-
-# Login to Expo
-eas login
-
-# Build for iOS Simulator
 cd apps/mobile
-npm run build:ios:simulator
-
-# Or build for physical device
-npm run build:ios
+npm run ios
 ```
 
-## iOS Build & Distribution
+**Android Emulator:**
+```bash
+cd apps/mobile
+npm run android
+```
+
+**Physical Device (Expo Go):**
+1. Install Expo Go on your iPhone or Android device
+2. Run `npm start` in the mobile directory
+3. Scan the QR code with your device
+
+## Build Commands
 
 ### Development Builds
 
 ```bash
 cd apps/mobile
 
-# Build for iOS Simulator
-npm run build:ios:simulator
+# iOS
+npm run build:ios                    # Build for physical iOS device
+npm run build:ios:simulator          # Build for iOS Simulator
 
-# Build for physical device (requires Apple Developer account)
-npm run build:ios
+# Android
+npm run build:android                # Build for Android (AAB)
+npm run build:android:apk            # Build APK for testing
+
+# Both platforms
+npm run build:all                    # Build for both iOS and Android
 ```
 
-### Production Build & App Store
+### Production Builds & Store Submission
 
-1. Update `app.json` with your Expo account details:
-   - Replace `your-project-id` with your EAS project ID
-   - Replace `your-expo-username` with your Expo username
-
-2. Update `eas.json` with your Apple credentials:
-   - `appleId`: Your Apple ID email
-   - `ascAppId`: App Store Connect App ID
-   - `appleTeamId`: Your Apple Developer Team ID
-
-3. Build and submit:
+**iOS (App Store):**
 ```bash
-# Production build
-npm run build:ios
-
-# Submit to App Store
-npm run submit:ios
+npm run build:ios                    # Production build
+npm run submit:ios                   # Submit to App Store
 ```
 
-### Generate Native iOS Project (Optional)
+**Android (Google Play):**
+```bash
+npm run build:android                # Production build (AAB)
+npm run submit:android               # Submit to Google Play
+```
 
-If you need to customize native iOS code:
+**Both platforms:**
+```bash
+npm run build:all                    # Build both
+npm run submit:all                   # Submit both
+```
+
+### Generate Native Projects (Optional)
+
+For native code customization:
 ```bash
 cd apps/mobile
-npm run prebuild:ios
 
-# This creates an /ios folder with native Xcode project
-# Open in Xcode: open ios/Scan2Market.xcworkspace
+# iOS
+npm run prebuild:ios
+open ios/Scan2Market.xcworkspace
+
+# Android
+npm run prebuild:android
+# Open android/ folder in Android Studio
 ```
 
-## iOS-Specific Features
+## Platform-Specific Configuration
 
-- **Haptic Feedback**: Vibration feedback when scanning barcodes
-- **Native Camera**: Uses iOS AVFoundation for barcode scanning
-- **iOS Alerts**: Native UIAlertController for dialogs
-- **Safe Area**: Proper handling of notch and home indicator
-- **iOS Styling**: San Francisco font, iOS-style buttons and inputs
+### iOS Configuration
+
+Update `app.json` and `eas.json`:
+- `bundleIdentifier`: Your iOS bundle ID (e.g., com.yourcompany.scan2market)
+- `appleId`: Your Apple ID email
+- `appleTeamId`: Your Apple Developer Team ID
+- `ascAppId`: App Store Connect App ID
+
+### Android Configuration
+
+Update `app.json` and `eas.json`:
+- `package`: Your Android package name (e.g., com.yourcompany.scan2market)
+- `serviceAccountKeyPath`: Path to Google Play service account JSON
+
+Create a Google Play service account:
+1. Go to Google Play Console > Setup > API access
+2. Create a service account with release permissions
+3. Download the JSON key file
+4. Place it at `apps/mobile/google-service-account.json`
 
 ## Environment Variables
 
@@ -235,19 +255,30 @@ npm run test --workspace=services/api
 - **Medium** (40-69): Moderate data available
 - **Low** (0-39): Limited or inconsistent data
 
-## iOS Testing Checklist
+## Testing Checklist
 
-- [ ] App launches on iOS Simulator
-- [ ] App launches on physical iPhone
+### Both Platforms
+- [ ] App launches successfully
 - [ ] Camera permission prompt appears
-- [ ] Barcode scanning works (use physical device)
-- [ ] Haptic feedback on scan (physical device only)
+- [ ] Barcode scanning works (physical device)
+- [ ] Haptic feedback on scan
 - [ ] Product info displays correctly
 - [ ] Price confidence indicator shows
-- [ ] Facebook Marketplace opens in Safari
+- [ ] Facebook Marketplace opens in browser
 - [ ] Manual search modal works
 - [ ] Scan history persists between sessions
 - [ ] Pull-to-refresh works
+
+### iOS Specific
+- [ ] Works on iOS Simulator (no camera)
+- [ ] Works on physical iPhone
+- [ ] Haptics feel native
+
+### Android Specific
+- [ ] Works on Android Emulator (no camera)
+- [ ] Works on physical Android device
+- [ ] Back button behavior correct
+- [ ] Material-style feedback
 
 ### Test Barcodes (Mock Data)
 
@@ -258,20 +289,25 @@ npm run test --workspace=services/api
 
 ## Troubleshooting
 
-### "Network Error" on iPhone
-- Ensure both iPhone and Mac are on same WiFi network
-- Use Mac's local IP in EXPO_PUBLIC_API_URL (not localhost)
-- Check Mac firewall allows incoming connections on port 3001
+### "Network Error" on device
+- Ensure device and development machine are on same WiFi network
+- Use machine's local IP in EXPO_PUBLIC_API_URL (not localhost)
+- Check firewall allows incoming connections on port 3001
 
-### Camera not working in Simulator
-- iOS Simulator doesn't support camera
-- Use physical iPhone for camera/barcode testing
-- Manual search works in simulator
+### Camera not working in Simulator/Emulator
+- Simulators don't support camera hardware
+- Use physical device for barcode testing
+- Manual search works in simulators
 
-### Build fails
+### Android build fails
+- Run `eas login` to authenticate
+- Check Android SDK is installed
+- Update EAS CLI: `npm install -g eas-cli@latest`
+
+### iOS build fails
 - Run `eas login` to authenticate
 - Check Xcode is installed: `xcode-select --install`
-- Update EAS CLI: `npm install -g eas-cli@latest`
+- Ensure Apple Developer account is set up
 
 ### App crashes on launch
 - Clear Expo cache: `expo start -c`
@@ -281,16 +317,19 @@ npm run test --workspace=services/api
 ## Tech Stack
 
 - **Mobile**: React Native (Expo SDK 52), TypeScript
-- **iOS Features**: expo-camera, expo-haptics, SafeAreaView
-- **Navigation**: expo-router
+- **Cross-Platform Features**: expo-camera, expo-haptics, expo-router
 - **Backend**: Node.js, Express, TypeScript
 - **APIs**: UPCitemdb, Open Food Facts, eBay Browse API
 
 ## Requirements
 
+**iOS:**
 - iOS 13.0+
 - iPhone 6s or later
-- Camera access for barcode scanning
+
+**Android:**
+- Android 6.0+ (API level 23)
+- Camera hardware
 
 ## License
 

@@ -8,6 +8,10 @@
       "distribution": "internal",
       "ios": {
         "simulator": false
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
       }
     },
     "development-simulator": {
@@ -21,10 +25,23 @@
       "distribution": "internal",
       "ios": {
         "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview-apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
       }
     },
     "production": {
       "ios": {
+        "autoIncrement": true
+      },
+      "android": {
+        "buildType": "app-bundle",
         "autoIncrement": true
       }
     }
@@ -35,6 +52,10 @@
         "appleId": "your-apple-id@email.com",
         "ascAppId": "your-app-store-connect-app-id",
         "appleTeamId": "YOUR_TEAM_ID"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "internal"
       }
     }
   }

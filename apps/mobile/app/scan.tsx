@@ -5,8 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
-  Platform
+  ActivityIndicator
 } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
@@ -29,18 +28,22 @@ export default function ScanScreen() {
   }, [permission]);
 
   const triggerHaptic = async (type: 'success' | 'error' | 'scan') => {
-    if (Platform.OS !== 'ios') return;
-
-    switch (type) {
-      case 'success':
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        break;
-      case 'error':
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        break;
-      case 'scan':
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        break;
+    // expo-haptics works on both iOS and Android
+    try {
+      switch (type) {
+        case 'success':
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          break;
+        case 'error':
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          break;
+        case 'scan':
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          break;
+      }
+    } catch (e) {
+      // Haptics may not be available on all devices (e.g., emulators)
+      console.log('Haptic feedback not available');
     }
   };
 
