@@ -217,7 +217,7 @@ export default function HistoryScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#1a73e8']}
+            colors={['#0f766e']}
           />
         }
       />
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
   },
   itemBrand: {
     fontSize: 14,
-    color: '#1a73e8',
+    color: '#0f766e',
     marginBottom: 4
   },
   itemBarcode: {
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
   },
   recheckButtonText: {
     fontSize: 14,
-    color: '#1a73e8',
+    color: '#0f766e',
     fontWeight: '500'
   },
   emptyState: {
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     marginBottom: 24
   },
   scanButton: {
-    backgroundColor: '#1a73e8',
+    backgroundColor: '#0f766e',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Scan2Market",
-    "slug": "scan2market",
+    "name": "Scan2Flip",
+    "slug": "scan2flip",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -9,18 +9,18 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1a73e8"
+      "backgroundColor": "#0891b2"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.scan2market.app",
+      "bundleIdentifier": "com.scan2flip.app",
       "buildNumber": "1",
       "infoPlist": {
-        "NSCameraUsageDescription": "Scan2Market needs camera access to scan product barcodes and identify products for price estimation.",
-        "NSPhotoLibraryUsageDescription": "Scan2Market may need photo library access to save product images.",
+        "NSCameraUsageDescription": "Scan2Flip needs camera access to scan product barcodes and identify products for price estimation.",
+        "NSPhotoLibraryUsageDescription": "Scan2Flip may need photo library access to save product images.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "config": {
@@ -30,9 +30,9 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1a73e8"
+        "backgroundColor": "#0891b2"
       },
-      "package": "com.scan2market.app",
+      "package": "com.scan2flip.app",
       "versionCode": 1,
       "permissions": [
         "android.permission.CAMERA",
@@ -48,24 +48,11 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Scan2Market needs camera access to scan product barcodes."
+          "cameraPermission": "Scan2Flip needs camera access to scan product barcodes."
         }
       ],
-      "expo-router",
-      "expo-haptics"
+      "expo-router"
     ],
-    "scheme": "scan2market",
-    "extra": {
-      "eas": {
-        "projectId": "your-project-id"
-      }
-    },
-    "owner": "your-expo-username",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/your-project-id"
-    }
+    "scheme": "scan2flip"
   }
 }

@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { PriceEstimate } from '../types';
 import { PriceConfidenceIndicator } from './PriceConfidenceIndicator';
 
 interface Props {
   estimate: PriceEstimate;
+  onSearchMarketplace?: () => void;
 }
 
 const formatPrice = (price: number, currency: string = 'USD'): string => {
@@ -14,17 +15,32 @@ const formatPrice = (price: number, currency: string = 'USD'): string => {
   }).format(price);
 };
 
-export const PriceDisplay: React.FC<Props> = ({ estimate }) => {
-  const hasValidPrices = estimate.averagePrice > 0;
+export const PriceDisplay: React.FC<Props> = ({ estimate, onSearchMarketplace }) => {
+  // Check for real sources - not just averagePrice > 0
+  // Sources must contain actual marketplace providers (e.g., 'ebay'), not empty
+  const hasRealSources = estimate.sources && estimate.sources.length > 0;
+  const hasValidPrices = estimate.averagePrice > 0 && hasRealSources;
 
   if (!hasValidPrices) {
     return (
       <View style={styles.container}>
-        <Text style={styles.noDataTitle}>No Price Data Available</Text>
-        <Text style={styles.noDataText}>
-          We couldn't find enough listings to estimate a price.
-          Try searching on Facebook Marketplace for more results.
-        </Text>
+        <View style={styles.noDataContainer}>
+          <Text style={styles.noDataIcon}>📊</Text>
+          <Text style={styles.noDataTitle}>No reliable estimate yet</Text>
+          <Text style={styles.noDataText}>
+            We couldn't find enough real marketplace listings to provide a confident price estimate.
+          </Text>
+          {onSearchMarketplace && (
+            <TouchableOpacity
+              style={styles.searchMarketplaceButton}
+              onPress={onSearchMarketplace}
+            >
+              <Text style={styles.searchMarketplaceButtonText}>
+                Tap to search Marketplace
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   }
@@ -130,7 +146,7 @@ const styles = StyleSheet.create({
   },
   averagePrice: {
     fontSize: 22,
-    color: '#1a73e8'
+    color: '#0f766e'
   },
   medianRow: {
     flexDirection: 'row',
@@ -164,10 +180,18 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     marginTop: 2
   },
+  noDataContainer: {
+    alignItems: 'center',
+    paddingVertical: 8
+  },
+  noDataIcon: {
+    fontSize: 32,
+    marginBottom: 12
+  },
   noDataTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#64748b',
+    color: '#475569',
     textAlign: 'center',
     marginBottom: 8
   },
@@ -175,6 +199,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#94a3b8',
     textAlign: 'center',
-    lineHeight: 20
+    lineHeight: 20,
+    marginBottom: 16,
+    paddingHorizontal: 8
+  },
+  searchMarketplaceButton: {
+    backgroundColor: '#0f766e',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10
+  },
+  searchMarketplaceButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600'
   }
 });

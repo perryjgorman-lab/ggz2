@@ -12,9 +12,11 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { apiService } from '../src/services/api';
 import { ManualSearchModal } from '../src/components';
+import { usePro } from '../src/providers';
 
 export default function ScanScreen() {
   const router = useRouter();
+  const { canScan, scansRemaining, isPro, recordScan } = usePro();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -50,11 +52,21 @@ export default function ScanScreen() {
   const handleBarCodeScanned = async (result: BarcodeScanningResult) => {
     if (scanned || loading) return;
 
+    // Check scan limit
+    if (!canScan) {
+      await triggerHaptic('error');
+      router.push('/paywall');
+      return;
+    }
+
     const { data: barcode, type } = result;
     console.log(`Scanned barcode: ${barcode} (type: ${type})`);
 
     // Haptic feedback when barcode is detected
     await triggerHaptic('scan');
+
+    // Record the scan for limit tracking
+    await recordScan();
 
     setScanned(true);
     setLoading(true);
@@ -161,7 +173,7 @@ export default function ScanScreen() {
   if (!permission) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#1a73e8" />
+        <ActivityIndicator size="large" color="#0f766e" />
       </View>
     );
   }
@@ -172,7 +184,7 @@ export default function ScanScreen() {
         <View style={styles.permissionBox}>
           <Text style={styles.permissionTitle}>Camera Permission Required</Text>
           <Text style={styles.permissionText}>
-            Scan2Market needs camera access to scan product barcodes.
+            Scan2Flip needs camera access to scan product barcodes.
           </Text>
           <TouchableOpacity
             style={styles.permissionButton}
@@ -238,6 +250,16 @@ export default function ScanScreen() {
               <Text style={styles.instructionsText}>
                 Point camera at barcode
               </Text>
+              {!isPro && (
+                <TouchableOpacity
+                  style={styles.scanLimitBadge}
+                  onPress={() => router.push('/paywall')}
+                >
+                  <Text style={styles.scanLimitText}>
+                    {scansRemaining} scans left today
+                  </Text>
+                </TouchableOpacity>
+              )}
               {lastError && (
                 <Text style={styles.errorText}>{lastError}</Text>
               )}
@@ -317,7 +339,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderTopWidth: 3,
     borderLeftWidth: 3,
-    borderColor: '#1a73e8',
+    borderColor: '#0f766e',
     borderTopLeftRadius: 12
   },
   cornerTR: {
@@ -328,7 +350,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderTopWidth: 3,
     borderRightWidth: 3,
-    borderColor: '#1a73e8',
+    borderColor: '#0f766e',
     borderTopRightRadius: 12
   },
   cornerBL: {
@@ -339,7 +361,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderBottomWidth: 3,
     borderLeftWidth: 3,
-    borderColor: '#1a73e8',
+    borderColor: '#0f766e',
     borderBottomLeftRadius: 12
   },
   cornerBR: {
@@ -350,7 +372,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderBottomWidth: 3,
     borderRightWidth: 3,
-    borderColor: '#1a73e8',
+    borderColor: '#0f766e',
     borderBottomRightRadius: 12
   },
   loadingOverlay: {
@@ -374,6 +396,18 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600'
   },
+  scanLimitBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 12
+  },
+  scanLimitText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '500'
+  },
   errorText: {
     color: '#ff6b6b',
     fontSize: 14,
@@ -386,7 +420,7 @@ const styles = StyleSheet.create({
     paddingTop: 20
   },
   rescanButton: {
-    backgroundColor: '#1a73e8',
+    backgroundColor: '#0f766e',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 14,
@@ -429,7 +463,7 @@ const styles = StyleSheet.create({
     lineHeight: 22
   },
   permissionButton: {
-    backgroundColor: '#1a73e8',
+    backgroundColor: '#0f766e',
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 14,
@@ -444,7 +478,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12
   },
   manualButtonText: {
-    color: '#1a73e8',
+    color: '#0f766e',
     fontSize: 15,
     fontWeight: '500'
   }

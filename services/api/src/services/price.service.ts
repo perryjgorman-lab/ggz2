@@ -19,10 +19,14 @@ export class PriceService {
   private providers: MarketplaceProvider[];
 
   constructor() {
-    this.providers = [
-      new EbayProvider(),
-      new MockMarketplaceProvider() // Fallback for development
-    ];
+    this.providers = [new EbayProvider()];
+
+    // Only add mock provider if explicitly enabled via ENABLE_MOCK=true
+    const enableMock = process.env.ENABLE_MOCK === 'true';
+    if (enableMock) {
+      console.log('Mock marketplace provider enabled (ENABLE_MOCK=true)');
+      this.providers.push(new MockMarketplaceProvider());
+    }
   }
 
   /**
@@ -57,13 +61,15 @@ export class PriceService {
     };
 
     // Fetch listings from all available providers
-    const allListings = await this.fetchFromProviders(searchParams);
+    const { listings, sources } = await this.fetchFromProviders(searchParams);
 
     // Calculate price estimate
-    const estimate = this.calculateEstimate(allListings);
+    const estimate = this.calculateEstimate(listings, sources);
 
-    // Cache the result
-    priceCache.set(cacheKey, estimate);
+    // Only cache if we have real data
+    if (sources.length > 0) {
+      priceCache.set(cacheKey, estimate);
+    }
 
     return estimate;
   }
@@ -93,8 +99,8 @@ export class PriceService {
 
   private async fetchFromProviders(
     params: MarketplaceSearchParams
-  ): Promise<MarketplaceListing[]> {
-    const results: MarketplaceListing[] = [];
+  ): Promise<{ listings: MarketplaceListing[]; sources: string[] }> {
+    const listings: MarketplaceListing[] = [];
     const sources: string[] = [];
 
     for (const provider of this.providers) {
@@ -105,23 +111,32 @@ export class PriceService {
           continue;
         }
 
-        const listings = await provider.search(params);
-        results.push(...listings);
-        if (listings.length > 0) {
+        console.log(`Fetching from provider: ${provider.name}`);
+        const providerListings = await provider.search(params);
+
+        if (providerListings.length > 0) {
+          listings.push(...providerListings);
           sources.push(provider.name);
+          console.log(`Provider ${provider.name} returned ${providerListings.length} listings`);
+        } else {
+          console.log(`Provider ${provider.name} returned 0 listings`);
         }
       } catch (error) {
         console.error(`Provider ${provider.name} failed:`, error);
       }
     }
 
-    return results;
+    return { listings, sources };
   }
 
-  private calculateEstimate(listings: MarketplaceListing[]): PriceEstimate {
+  private calculateEstimate(
+    listings: MarketplaceListing[],
+    sources: string[]
+  ): PriceEstimate {
     const now = new Date();
 
-    if (listings.length === 0) {
+    // No listings found - return "no reliable estimate" response
+    if (listings.length === 0 || sources.length === 0) {
       return {
         lowPrice: 0,
         highPrice: 0,
@@ -137,6 +152,7 @@ export class PriceService {
 
     const prices = listings.map(l => l.price).filter(p => p > 0).sort((a, b) => a - b);
 
+    // No valid prices
     if (prices.length === 0) {
       return {
         lowPrice: 0,
@@ -146,7 +162,7 @@ export class PriceService {
         currency: 'USD',
         confidence: this.calculateConfidence([], now),
         listings,
-        sources: [...new Set(listings.map(l => l.source))],
+        sources,
         lastUpdated: now
       };
     }
@@ -167,7 +183,7 @@ export class PriceService {
       currency: listings[0]?.currency || 'USD',
       confidence: this.calculateConfidence(listings, now),
       listings,
-      sources: [...new Set(listings.map(l => l.source))],
+      sources,
       lastUpdated: now
     };
   }

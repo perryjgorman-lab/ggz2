@@ -149,7 +149,7 @@ export default function ProductScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1a73e8" />
+        <ActivityIndicator size="large" color="#0f766e" />
         <Text style={styles.loadingText}>Loading product...</Text>
       </View>
     );
@@ -175,18 +175,21 @@ export default function ProductScreen() {
         <RefreshControl
           refreshing={refreshing}
           onRefresh={handleRefresh}
-          colors={['#1a73e8']}
+          colors={['#0f766e']}
         />
       }
     >
       <ProductCard product={product} />
 
       {priceEstimate ? (
-        <PriceDisplay estimate={priceEstimate} />
+        <PriceDisplay
+          estimate={priceEstimate}
+          onSearchMarketplace={handleFacebookSearch}
+        />
       ) : (
         <View style={styles.loadingPrices}>
-          <ActivityIndicator size="small" color="#1a73e8" />
-          <Text style={styles.loadingPricesText}>Loading prices...</Text>
+          <ActivityIndicator size="small" color="#0f766e" />
+          <Text style={styles.loadingPricesText}>Fetching marketplace prices...</Text>
         </View>
       )}
 
@@ -266,7 +269,7 @@ const styles = StyleSheet.create({
     marginBottom: 24
   },
   retryButton: {
-    backgroundColor: '#1a73e8',
+    backgroundColor: '#0f766e',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12
@@ -322,10 +325,10 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#1a73e8'
+    borderColor: '#0f766e'
   },
   scanAnotherButtonText: {
-    color: '#1a73e8',
+    color: '#0f766e',
     fontSize: 16,
     fontWeight: '600'
   },

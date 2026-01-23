@@ -1,31 +1,34 @@
-# Scan2Market
+# Scan2Flip
 
-A cross-platform mobile app (iOS & Android) to scan product barcodes (UPC/EAN) and get estimated resale prices from marketplaces.
+A cross-platform mobile app (iOS & Android) to scan product barcodes (UPC/EAN) and get estimated resale prices from real marketplaces like eBay.
 
 ## Features
 
 - **Barcode Scanning**: Native camera integration with haptic feedback on both platforms
 - **Product Lookup**: Automatic product identification via UPCitemdb and Open Food Facts
-- **Price Estimation**: Get estimated resale prices from eBay and other marketplaces
+- **Real Price Estimation**: Get estimated resale prices from eBay (no mock data by default)
 - **Price Confidence Indicator**: See how reliable the price estimate is (High/Medium/Low) based on:
   - Number of comparable listings found
   - Recency of listings
   - Price spread/variance
+- **Truthful Rendering**: Shows "No reliable estimate yet" when no real marketplace data is available
 - **Facebook Marketplace Integration**: Compliant search via browser (user-assisted flow)
 - **Manual Search Fallback**: Enter product name when barcode lookup fails
 - **Scan History**: View previously scanned items and re-check prices
 - **Location-based Pricing**: Enter ZIP code for local marketplace results
+- **Free Tier**: 10 scans per day (Pro upgrade path ready)
 - **Cross-Platform**: Runs natively on iOS and Android
 
 ## Project Structure
 
 ```
-scan2market/
+scan2flip/
 ├── apps/
 │   └── mobile/          # Expo React Native app (iOS & Android)
 │       ├── app/         # expo-router screens
 │       ├── src/
 │       │   ├── components/
+│       │   ├── providers/   # ProProvider for free tier/Pro
 │       │   ├── services/
 │       │   └── types/
 │       ├── assets/
@@ -38,15 +41,32 @@ scan2market/
 │           ├── services/
 │           │   └── providers/
 │           └── utils/
+├── .nvmrc               # Node version (20)
 └── README.md
 ```
 
 ## Prerequisites
 
-- Node.js 18+
+- **Node.js 20** (required)
 - npm 9+
 - Expo CLI: `npm install -g expo-cli`
 - EAS CLI (for builds): `npm install -g eas-cli`
+
+### Setting up Node.js
+
+We use Node.js 20. Use nvm to manage versions:
+
+```bash
+# Install nvm (if not already installed)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# Use the correct Node version
+nvm install
+nvm use
+
+# Verify
+node --version  # Should show v20.x.x
+```
 
 **For iOS:**
 - macOS with Xcode 15+
@@ -64,7 +84,12 @@ scan2market/
 
 ```bash
 git clone <repository-url>
-cd scan2market
+cd scan2flip
+
+# Ensure correct Node version
+nvm use
+
+# Install dependencies
 npm install
 ```
 
@@ -74,15 +99,37 @@ npm install
 ```bash
 cd services/api
 cp .env.example .env
-# Edit .env with your API keys
 ```
+
+Edit `.env` with your eBay API credentials:
+```env
+# eBay API (required for real pricing)
+EBAY_CLIENT_ID=your_ebay_client_id
+EBAY_CLIENT_SECRET=your_ebay_client_secret
+EBAY_MARKETPLACE_ID=EBAY_US
+
+# Set to 'true' to enable mock data (development only)
+ENABLE_MOCK=false
+```
+
+To get eBay API credentials:
+1. Go to https://developer.ebay.com/
+2. Create an application
+3. Copy the Client ID and Client Secret from your app's "Production" keyset
 
 **Mobile (apps/mobile/.env)**:
 ```bash
 cd apps/mobile
 cp .env.example .env
+```
+
+Edit `.env`:
+```env
 # Set API URL to your machine's local IP
-# Example: EXPO_PUBLIC_API_URL=http://192.168.1.100:3001
+EXPO_PUBLIC_API_URL=http://192.168.1.100:3001
+
+# Free tier scan limit
+EXPO_PUBLIC_FREE_SCANS_PER_DAY=10
 ```
 
 ### 3. Run the Application
@@ -162,7 +209,7 @@ cd apps/mobile
 
 # iOS
 npm run prebuild:ios
-open ios/Scan2Market.xcworkspace
+open ios/Scan2Flip.xcworkspace
 
 # Android
 npm run prebuild:android
@@ -174,7 +221,7 @@ npm run prebuild:android
 ### iOS Configuration
 
 Update `app.json` and `eas.json`:
-- `bundleIdentifier`: Your iOS bundle ID (e.g., com.yourcompany.scan2market)
+- `bundleIdentifier`: Your iOS bundle ID (e.g., com.yourcompany.scan2flip)
 - `appleId`: Your Apple ID email
 - `appleTeamId`: Your Apple Developer Team ID
 - `ascAppId`: App Store Connect App ID
@@ -182,7 +229,7 @@ Update `app.json` and `eas.json`:
 ### Android Configuration
 
 Update `app.json` and `eas.json`:
-- `package`: Your Android package name (e.g., com.yourcompany.scan2market)
+- `package`: Your Android package name (e.g., com.yourcompany.scan2flip)
 - `serviceAccountKeyPath`: Path to Google Play service account JSON
 
 Create a Google Play service account:
@@ -200,14 +247,26 @@ Create a Google Play service account:
 | `PORT` | No | Server port (default: 3001) |
 | `NODE_ENV` | No | Environment (development/production) |
 | `UPCITEMDB_API_KEY` | No | UPCitemdb API key for product lookup |
-| `EBAY_APP_ID` | No | eBay API App ID |
-| `EBAY_CERT_ID` | No | eBay API Cert ID |
+| `EBAY_CLIENT_ID` | Yes | eBay API Client ID |
+| `EBAY_CLIENT_SECRET` | Yes | eBay API Client Secret |
+| `EBAY_MARKETPLACE_ID` | No | eBay marketplace (default: EBAY_US) |
+| `ENABLE_MOCK` | No | Enable mock data (default: false) |
 
 ### Mobile (apps/mobile/.env)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `EXPO_PUBLIC_API_URL` | Yes | Backend API URL (use local IP, not localhost) |
+| `EXPO_PUBLIC_FREE_SCANS_PER_DAY` | No | Free tier scan limit (default: 10) |
+
+## Free Tier & Pro
+
+The app includes a free tier with scan limits:
+
+- **Free tier**: 10 scans per day
+- **Pro tier**: Unlimited scans (paywall scaffolding ready)
+
+The paywall screen is implemented but the actual purchase flow (RevenueCat/IAP) is stubbed out. To enable Pro features for testing, you can set the Pro status in AsyncStorage.
 
 ## API Endpoints
 
@@ -255,6 +314,14 @@ npm run test --workspace=services/api
 - **Medium** (40-69): Moderate data available
 - **Low** (0-39): Limited or inconsistent data
 
+## Truthful Rendering
+
+When no real marketplace data is available (empty sources array), the app shows:
+- "No reliable estimate yet"
+- "Tap to search Marketplace" button
+
+This ensures users are never shown fake or mock price data.
+
 ## Testing Checklist
 
 ### Both Platforms
@@ -263,11 +330,14 @@ npm run test --workspace=services/api
 - [ ] Barcode scanning works (physical device)
 - [ ] Haptic feedback on scan
 - [ ] Product info displays correctly
-- [ ] Price confidence indicator shows
+- [ ] Price confidence indicator shows (when real data available)
+- [ ] "No reliable estimate" shows (when no real data)
 - [ ] Facebook Marketplace opens in browser
 - [ ] Manual search modal works
 - [ ] Scan history persists between sessions
 - [ ] Pull-to-refresh works
+- [ ] Scan limit counter shows
+- [ ] Paywall appears when limit reached
 
 ### iOS Specific
 - [ ] Works on iOS Simulator (no camera)
@@ -280,13 +350,6 @@ npm run test --workspace=services/api
 - [ ] Back button behavior correct
 - [ ] Material-style feedback
 
-### Test Barcodes (Mock Data)
-
-- `012345678905` - Apple AirPods Pro
-- `887276629551` - Samsung Galaxy S23 Ultra
-- `194252145326` - Apple iPhone 14 Pro
-- `889842640816` - Nintendo Switch OLED
-
 ## Troubleshooting
 
 ### "Network Error" on device
@@ -298,6 +361,15 @@ npm run test --workspace=services/api
 - Simulators don't support camera hardware
 - Use physical device for barcode testing
 - Manual search works in simulators
+
+### "No reliable estimate" always showing
+- Ensure eBay API credentials are configured correctly
+- Check backend logs for eBay API errors
+- Verify ENABLE_MOCK is not set to 'true' unless intended
+
+### Node version mismatch
+- Run `nvm use` to switch to correct Node version
+- Check `.nvmrc` file exists with "20"
 
 ### Android build fails
 - Run `eas login` to authenticate
@@ -318,7 +390,7 @@ npm run test --workspace=services/api
 
 - **Mobile**: React Native (Expo SDK 52), TypeScript
 - **Cross-Platform Features**: expo-camera, expo-haptics, expo-router
-- **Backend**: Node.js, Express, TypeScript
+- **Backend**: Node.js 20, Express, TypeScript
 - **APIs**: UPCitemdb, Open Food Facts, eBay Browse API
 
 ## Requirements

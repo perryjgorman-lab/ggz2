@@ -60,9 +60,9 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.hero}>
-          <Text style={styles.heroTitle}>Scan2Market</Text>
+          <Text style={styles.heroTitle}>Scan2Flip</Text>
           <Text style={styles.heroSubtitle}>
-            Scan any product barcode to find its resale value
+            Scan any product barcode to find its resale value on real marketplaces
           </Text>
         </View>
 
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#1a73e8',
+    color: '#0f766e',
     marginBottom: 8
   },
   heroSubtitle: {
@@ -174,14 +174,14 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0'
   },
   scanButton: {
-    backgroundColor: '#1a73e8',
+    backgroundColor: '#0f766e',
     borderRadius: 16,
     padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
-    shadowColor: '#1a73e8',
+    shadowColor: '#0f766e',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0'
   },
   historyButtonText: {
-    color: '#1a73e8',
+    color: '#0f766e',
     fontSize: 16,
     fontWeight: '600'
   },
