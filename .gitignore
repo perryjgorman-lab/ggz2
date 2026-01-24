@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+*.lcov
+
+# Production builds
+dist/
+build/
+*.tsbuildinfo
+
+# Expo
+.expo/
+.expo-shared/
+web-build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+*.swp
+*.swo
+*~
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# SQLite
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Misc
+.cache/
+tmp/
+temp/
