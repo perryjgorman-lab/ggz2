@@ -1,2 +1,2 @@
-# ggz2
-nothing
+# GGz
+Scam risk analyzer app
