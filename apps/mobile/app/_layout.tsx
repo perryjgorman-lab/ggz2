@@ -10,6 +10,7 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { db } from '../src/services/database';
+import { AppResetProvider } from '../src/state/AppResetContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -44,7 +45,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <AppResetProvider>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
@@ -65,6 +66,6 @@ export default function RootLayout() {
           }}
         />
       </Stack>
-    </>
+    </AppResetProvider>
   );
 }

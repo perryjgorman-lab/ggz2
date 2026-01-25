@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,11 +6,20 @@ import { Search } from 'lucide-react-native';
 import { useTheme } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 import { TextField } from '../../src/components/ui/TextField';
+import { useAppReset } from '../../src/state/AppResetContext';
 
 export default function AnalyzeScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { resetToken } = useAppReset();
   const [url, setUrl] = useState('');
+
+  // Clear URL when resetToken changes
+  useEffect(() => {
+    if (resetToken > 0) {
+      setUrl('');
+    }
+  }, [resetToken]);
 
   const handleAnalyze = () => {
     router.push({

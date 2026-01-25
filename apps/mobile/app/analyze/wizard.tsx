@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,13 +25,16 @@ import {
 } from '@scamsight/shared';
 import { db } from '../../src/services/database';
 import { ExternalLink, AlertTriangle } from 'lucide-react-native';
+import { useAppReset } from '../../src/state/AppResetContext';
 
 export default function WizardScreen() {
   const theme = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { resetToken } = useAppReset();
+  const initialResetToken = useRef(resetToken);
   const [step, setStep] = useState(0);
-  const [url] = useState((params.url as string) || '');
+  const [url, setUrl] = useState((params.url as string) || '');
   const [platform, setPlatform] = useState<Platform>(Platform.GENERIC);
 
   // Listing details
@@ -53,6 +56,31 @@ export default function WizardScreen() {
   const [suspiciousPayment, setSuspiciousPayment] = useState(false);
 
   const [analyzing, setAnalyzing] = useState(false);
+
+  // Reset wizard and navigate away when resetToken changes after initial mount
+  useEffect(() => {
+    if (resetToken !== initialResetToken.current) {
+      // Reset all wizard state
+      setStep(0);
+      setUrl('');
+      setPlatform(Platform.GENERIC);
+      setTitle('');
+      setDescription('');
+      setPrice('');
+      setLocation('');
+      setAccountAge('');
+      setIsVerified(null);
+      setReviewCount('');
+      setRating('');
+      setUrgencyLanguage(false);
+      setTooGoodToBeTrue(false);
+      setExternalLinks(false);
+      setSuspiciousPayment(false);
+      setAnalyzing(false);
+      // Navigate back to home
+      router.replace('/');
+    }
+  }, [resetToken, router]);
 
   useEffect(() => {
     detectPlatform();

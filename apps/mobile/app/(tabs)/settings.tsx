@@ -9,16 +9,20 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Shield, Eye, BarChart, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../../src/theme/useTheme';
 import { Card } from '../../src/components/ui/Card';
 import { Button } from '../../src/components/ui/Button';
 import { db } from '../../src/services/database';
 import { useAppStore } from '../../src/stores/appStore';
+import { useAppReset } from '../../src/state/AppResetContext';
 
 export default function SettingsScreen() {
   const theme = useTheme();
-  const { reverseImageEnabled, analyticsEnabled, setReverseImageEnabled, setAnalyticsEnabled } =
+  const router = useRouter();
+  const { triggerReset } = useAppReset();
+  const { reverseImageEnabled, analyticsEnabled, setReverseImageEnabled, setAnalyticsEnabled, clearCurrentDraft } =
     useAppStore();
   const [localReverseImage, setLocalReverseImage] = useState(reverseImageEnabled);
   const [localAnalytics, setLocalAnalytics] = useState(analyticsEnabled);
@@ -97,7 +101,18 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // 1. Clear SQLite tables
               await db.deleteAllReports();
+
+              // 2. Clear Zustand draft state
+              clearCurrentDraft();
+
+              // 3. Broadcast reset to all screens (increments resetToken)
+              triggerReset();
+
+              // 4. Navigate to home with reset params to clear navigation state
+              router.replace('/');
+
               Alert.alert('Success', 'All data has been deleted');
             } catch {
               Alert.alert('Error', 'Failed to delete data');

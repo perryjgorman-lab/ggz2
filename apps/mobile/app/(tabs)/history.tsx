@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Clock, Search, TrendingDown, AlertTriangle, TrendingUp } from 'lucide-react-native';
 import { useTheme } from '../../src/theme/useTheme';
@@ -16,10 +17,12 @@ import { Card } from '../../src/components/ui/Card';
 import { Chip } from '../../src/components/ui/Chip';
 import { db } from '../../src/services/database';
 import { Report, RiskLevel, Platform } from '@scamsight/shared';
+import { useAppReset } from '../../src/state/AppResetContext';
 
 export default function HistoryScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { resetToken } = useAppReset();
   const [reports, setReports] = useState<Report[]>([]);
   const [filteredReports, setFilteredReports] = useState<Report[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -27,9 +30,23 @@ export default function HistoryScreen() {
   const [selectedRisk, setSelectedRisk] = useState<RiskLevel | 'all'>('all');
   const [refreshing, setRefreshing] = useState(false);
 
+  // Load reports on screen focus and when resetToken changes
+  useFocusEffect(
+    useCallback(() => {
+      loadReports();
+    }, [resetToken])
+  );
+
+  // Clear reports immediately when resetToken changes (optimistic UI)
   useEffect(() => {
-    loadReports();
-  }, []);
+    if (resetToken > 0) {
+      setReports([]);
+      setFilteredReports([]);
+      setSearchQuery('');
+      setSelectedPlatform('all');
+      setSelectedRisk('all');
+    }
+  }, [resetToken]);
 
   useEffect(() => {
     applyFilters();

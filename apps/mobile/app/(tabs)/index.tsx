@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Shield, TrendingDown, TrendingUp, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '../../src/theme/useTheme';
@@ -17,17 +18,30 @@ import { TextField } from '../../src/components/ui/TextField';
 import { Chip } from '../../src/components/ui/Chip';
 import { db } from '../../src/services/database';
 import { Report } from '@scamsight/shared';
+import { useAppReset } from '../../src/state/AppResetContext';
 
 export default function HomeScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { resetToken } = useAppReset();
   const [url, setUrl] = useState('');
   const [recentReports, setRecentReports] = useState<Report[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Load reports on screen focus and when resetToken changes
+  useFocusEffect(
+    useCallback(() => {
+      loadRecentReports();
+    }, [resetToken])
+  );
+
+  // Clear state immediately when resetToken changes (optimistic UI)
   useEffect(() => {
-    loadRecentReports();
-  }, []);
+    if (resetToken > 0) {
+      setUrl('');
+      setRecentReports([]);
+    }
+  }, [resetToken]);
 
   const loadRecentReports = async () => {
     try {
