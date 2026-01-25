@@ -26,6 +26,12 @@ import {
 import { db } from '../../src/services/database';
 import { ExternalLink, AlertTriangle } from 'lucide-react-native';
 import { useAppReset } from '../../src/state/AppResetContext';
+import {
+  unfurlUrl,
+  requiresUserAssist,
+  truncateDescription,
+  UnfurlData,
+} from '../../src/services/unfurl';
 
 export default function WizardScreen() {
   const theme = useTheme();
@@ -56,6 +62,9 @@ export default function WizardScreen() {
   const [suspiciousPayment, setSuspiciousPayment] = useState(false);
 
   const [analyzing, setAnalyzing] = useState(false);
+
+  // Autofill state
+  const [isUnfurling, setIsUnfurling] = useState(false);
 
   // Reset wizard and navigate away when resetToken changes after initial mount
   useEffect(() => {
@@ -104,6 +113,86 @@ export default function WizardScreen() {
       await WebBrowser.openBrowserAsync(url);
     } catch {
       Alert.alert('Error', 'Could not open browser');
+    }
+  };
+
+  /**
+   * Apply unfurled data to form fields
+   */
+  const applyUnfurlData = (data: UnfurlData) => {
+    if (data.title && !title) setTitle(data.title);
+    if (data.description && !description) {
+      setDescription(truncateDescription(data.description, 500));
+    }
+    if (data.price !== undefined && !price) {
+      setPrice(String(data.price));
+    }
+    if (data.location && !location) setLocation(data.location);
+  };
+
+  /**
+   * Attempt to autofill listing details from URL
+   */
+  const handleAutofill = async () => {
+    if (!url) return;
+
+    // Check if this site requires user-assisted extraction
+    if (requiresUserAssist(url)) {
+      Alert.alert(
+        'Manual Entry Required',
+        'This site requires login or blocks automated access. Please open the listing in your browser and manually enter the details.',
+        [
+          { text: 'Open in Browser', onPress: openListing },
+          { text: 'Enter Manually', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
+    setIsUnfurling(true);
+
+    try {
+      const result = await unfurlUrl(url);
+
+      if (result.confidence === 'none' || result.blockedReason) {
+        Alert.alert(
+          'Could Not Auto-Extract',
+          result.blockedReason || 'Unable to extract listing details. Please enter them manually.',
+          [
+            { text: 'Open in Browser', onPress: openListing },
+            { text: 'Enter Manually', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+
+      // Apply the extracted data
+      applyUnfurlData(result.data);
+
+      const filledFields = [
+        result.data.title,
+        result.data.price,
+        result.data.description,
+        result.data.location,
+      ].filter(Boolean).length;
+
+      if (filledFields > 0) {
+        Alert.alert(
+          'Details Extracted',
+          `Found ${filledFields} field${filledFields > 1 ? 's' : ''}. Please review and complete the remaining details.`,
+          [{ text: 'OK', onPress: () => setStep(1) }]
+        );
+      }
+    } catch (error) {
+      console.error('Autofill error:', error);
+      setShowWebViewFallback(true);
+      Alert.alert(
+        'Autofill Failed',
+        'Could not extract details. Please enter them manually.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsUnfurling(false);
     }
   };
 
@@ -211,8 +300,9 @@ export default function WizardScreen() {
               },
             ]}
           >
-            We'll open the listing in your browser. Please review it and return here to confirm
-            details.
+            {requiresUserAssist(url)
+              ? 'This site requires manual entry. Open the listing and enter details on the next screen.'
+              : 'Try auto-extracting details, or open the listing to review manually.'}
           </Text>
 
           <Card variant="elevated" style={{ marginBottom: theme.spacing.base }}>
@@ -235,8 +325,21 @@ export default function WizardScreen() {
             </View>
           </Card>
 
+          {/* Autofill Button - only show for non-blocked sites */}
+          {!requiresUserAssist(url) && (
+            <Button
+              variant="primary"
+              onPress={handleAutofill}
+              disabled={isUnfurling}
+              loading={isUnfurling}
+              style={{ marginBottom: theme.spacing.md }}
+            >
+              {isUnfurling ? 'Extracting...' : 'Auto-Extract Details'}
+            </Button>
+          )}
+
           <Button variant="secondary" onPress={openListing}>
-            Open Listing in Browser
+            Open in Browser
           </Button>
 
           <Text
@@ -251,7 +354,9 @@ export default function WizardScreen() {
               },
             ]}
           >
-            🔒 We don't scrape or access the page. You manually enter details.
+            {requiresUserAssist(url)
+              ? '🔒 This site blocks automated access. Your data stays private.'
+              : '🔒 Auto-extract uses public metadata only. No login required.'}
           </Text>
         </View>
       ),

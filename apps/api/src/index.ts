@@ -6,6 +6,7 @@ import { logger } from './logger';
 import { healthRoutes } from './routes/health.route';
 import { compsRoutes } from './routes/comps.route';
 import { reverseImageRoutes } from './routes/reverse-image.route';
+import { unfurlRoutes } from './routes/unfurl.route';
 
 async function main() {
   const fastify = Fastify({
@@ -36,6 +37,7 @@ async function main() {
   await fastify.register(healthRoutes);
   await fastify.register(compsRoutes);
   await fastify.register(reverseImageRoutes);
+  await fastify.register(unfurlRoutes);
 
   // 404 handler
   fastify.setNotFoundHandler((_request, reply) => {
