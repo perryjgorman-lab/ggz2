@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Shield, Eye, BarChart, Trash2, Info, FileText } from 'lucide-react-native';
+import { Shield, Eye, BarChart, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../../src/theme/useTheme';
 import { Card } from '../../src/components/ui/Card';
 import { Button } from '../../src/components/ui/Button';
@@ -99,7 +99,7 @@ export default function SettingsScreen() {
             try {
               await db.deleteAllReports();
               Alert.alert('Success', 'All data has been deleted');
-            } catch (error) {
+            } catch {
               Alert.alert('Error', 'Failed to delete data');
             }
           },
@@ -116,6 +116,7 @@ export default function SettingsScreen() {
     onValueChange,
     destructive,
   }: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     icon: any;
     title: string;
     description: string;

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: ['**']
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, master]
 
 jobs:
   lint-and-typecheck:
@@ -23,6 +23,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=@scamsight/shared
 
       - name: Lint
         run: npm run lint
@@ -47,6 +50,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build shared package
+        run: npm run build --workspace=@scamsight/shared
+
       - name: Run tests
         run: npm run test:shared
 
@@ -56,6 +62,7 @@ jobs:
           files: ./packages/shared/coverage/lcov.info
           flags: shared
           name: shared-coverage
+        continue-on-error: true
 
   build-api:
     name: Build API
@@ -73,6 +80,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=@scamsight/shared
 
       - name: Build API
         run: npm run api:build
@@ -94,10 +104,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build shared package
+        run: npm run build --workspace=@scamsight/shared
+
       - name: Check Expo config
         run: |
           cd apps/mobile
           npx expo config --type public
+
+      - name: Expo export (iOS bundle)
+        run: |
+          cd apps/mobile
+          npx expo export --platform ios
 
   security-audit:
     name: Security Audit

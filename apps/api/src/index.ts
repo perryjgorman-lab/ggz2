@@ -23,7 +23,7 @@ async function main() {
   await fastify.register(rateLimit, {
     max: config.rateLimit.max,
     timeWindow: config.rateLimit.timeWindow,
-    errorResponseBuilder: (request, context) => {
+    errorResponseBuilder: (_request, context) => {
       return {
         success: false,
         error: 'Rate limit exceeded',
@@ -38,7 +38,7 @@ async function main() {
   await fastify.register(reverseImageRoutes);
 
   // 404 handler
-  fastify.setNotFoundHandler((request, reply) => {
+  fastify.setNotFoundHandler((_request, reply) => {
     reply.code(404).send({
       success: false,
       error: 'Route not found',

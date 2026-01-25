@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Share,
-  TouchableOpacity,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +14,6 @@ import {
   Info,
   CheckCircle2,
   AlertCircle,
-  Share2,
 } from 'lucide-react-native';
 import { useTheme } from '../../../src/theme/useTheme';
 import { Card } from '../../../src/components/ui/Card';

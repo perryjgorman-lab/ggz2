@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,14 +24,14 @@ import {
   RedFlags,
 } from '@scamsight/shared';
 import { db } from '../../src/services/database';
-import { ExternalLink, User, AlertTriangle, DollarSign, Camera } from 'lucide-react-native';
+import { ExternalLink, AlertTriangle } from 'lucide-react-native';
 
 export default function WizardScreen() {
   const theme = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
   const [step, setStep] = useState(0);
-  const [url, setUrl] = useState((params.url as string) || '');
+  const [url] = useState((params.url as string) || '');
   const [platform, setPlatform] = useState<Platform>(Platform.GENERIC);
 
   // Listing details
@@ -73,18 +74,20 @@ export default function WizardScreen() {
   const openListing = async () => {
     try {
       await WebBrowser.openBrowserAsync(url);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Could not open browser');
     }
   };
 
   const handleNext = () => {
+    Keyboard.dismiss();
     if (step < steps.length - 1) {
       setStep(step + 1);
     }
   };
 
   const handleBack = () => {
+    Keyboard.dismiss();
     if (step > 0) {
       setStep(step - 1);
     }
@@ -230,6 +233,7 @@ export default function WizardScreen() {
       component: (
         <View>
           <TextField
+            key="listing-title"
             label="Title *"
             placeholder="What is being sold?"
             value={title}
@@ -237,6 +241,7 @@ export default function WizardScreen() {
             style={{ marginBottom: theme.spacing.md }}
           />
           <TextField
+            key="listing-description"
             label="Description"
             placeholder="Copy any description text (optional)"
             value={description}
@@ -246,6 +251,7 @@ export default function WizardScreen() {
             style={{ marginBottom: theme.spacing.md }}
           />
           <TextField
+            key="listing-price"
             label="Price"
             placeholder="e.g., 500"
             value={price}
@@ -254,6 +260,7 @@ export default function WizardScreen() {
             style={{ marginBottom: theme.spacing.md }}
           />
           <TextField
+            key="listing-location"
             label="Location"
             placeholder="e.g., San Francisco, CA"
             value={location}
@@ -267,6 +274,7 @@ export default function WizardScreen() {
       component: (
         <View>
           <TextField
+            key="seller-account-age"
             label="Account Age (months)"
             placeholder="e.g., 24"
             value={accountAge}
@@ -347,6 +355,7 @@ export default function WizardScreen() {
           </View>
 
           <TextField
+            key="seller-review-count"
             label="Review Count"
             placeholder="e.g., 25"
             value={reviewCount}
@@ -356,6 +365,7 @@ export default function WizardScreen() {
           />
 
           <TextField
+            key="seller-rating"
             label="Average Rating (0-5)"
             placeholder="e.g., 4.5"
             value={rating}
@@ -385,7 +395,7 @@ export default function WizardScreen() {
 
           <RedFlagToggle
             label="Urgency language"
-            description='"Act now", "Limited time", "Won\'t last"'
+            description={`"Act now", "Limited time", "Won't last"`}
             value={urgencyLanguage}
             onValueChange={setUrgencyLanguage}
           />
@@ -412,7 +422,7 @@ export default function WizardScreen() {
     },
   ];
 
-  const RedFlagToggle = ({
+    function RedFlagToggle({
     label,
     description,
     value,
@@ -422,7 +432,8 @@ export default function WizardScreen() {
     description: string;
     value: boolean;
     onValueChange: (value: boolean) => void;
-  }) => (
+  }) {
+    return (    
     <TouchableOpacity
       onPress={() => onValueChange(!value)}
       style={[
@@ -486,8 +497,8 @@ export default function WizardScreen() {
         />
       </View>
     </TouchableOpacity>
-  );
-
+    );
+  }
   const currentStep = steps[step];
   const isLastStep = step === steps.length - 1;
 
@@ -502,7 +513,7 @@ export default function WizardScreen() {
               style={[
                 styles.progressDot,
                 {
-                  width: (100 / steps.length - 2) + '%',
+                  flex: 1,
                   height: 4,
                   backgroundColor:
                     index <= step ? theme.colors.primary : theme.colors.surface2,

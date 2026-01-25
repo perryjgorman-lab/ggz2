@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { SCORING_ENGINE_VERSION } from '@scamsight/shared';
 
 export async function healthRoutes(fastify: FastifyInstance) {
-  fastify.get('/health', async (request, reply) => {
+  fastify.get('/health', async () => {
     return {
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -11,7 +11,7 @@ export async function healthRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/health/ready', async (request, reply) => {
+  fastify.get('/health/ready', async () => {
     // Check dependencies (database, external APIs, etc.)
     // For now, simple check
     return {

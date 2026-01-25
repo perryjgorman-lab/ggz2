@@ -41,7 +41,7 @@ export class ReverseImageService {
     }
   }
 
-  async searchImageBase64(base64Image: string): Promise<ReverseImageResult> {
+  async searchImageBase64(_base64Image: string): Promise<ReverseImageResult> {
     if (!this.isConfigured()) {
       logger.info('Reverse image search not configured');
       return { matches: [], totalMatches: 0 };
@@ -60,7 +60,7 @@ export class ReverseImageService {
     }
   }
 
-  private async mockReverseImageAPI(imageUrl: string): Promise<ReverseImageResult> {
+  private async mockReverseImageAPI(_imageUrl: string): Promise<ReverseImageResult> {
     // Mock implementation - replace with real API call in production
     // Simulate finding some matches
     const matchCount = Math.floor(Math.random() * 5);

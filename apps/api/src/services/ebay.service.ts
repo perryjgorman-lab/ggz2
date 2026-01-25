@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+// import fetch from 'node-fetch'; // Reserved for production use
 import { config } from '../config';
 import { logger } from '../logger';
 
@@ -74,7 +74,7 @@ export class EbayService {
     }
   }
 
-  private async mockEbayAPI(query: string, category?: string): Promise<EbayCompsResult> {
+  private async mockEbayAPI(query: string, _category?: string): Promise<EbayCompsResult> {
     // Mock implementation - replace with real eBay API call in production
     // This simulates market data based on common items
 

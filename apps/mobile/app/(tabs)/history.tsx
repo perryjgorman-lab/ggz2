@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Clock, Search, Filter, TrendingDown, AlertTriangle, TrendingUp } from 'lucide-react-native';
+import { Clock, Search, TrendingDown, AlertTriangle, TrendingUp } from 'lucide-react-native';
 import { useTheme } from '../../src/theme/useTheme';
 import { Card } from '../../src/components/ui/Card';
 import { Chip } from '../../src/components/ui/Chip';

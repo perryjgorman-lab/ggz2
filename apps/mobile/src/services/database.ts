@@ -1,17 +1,43 @@
-import * as SQLite from 'expo-sqlite';
+import * as SQLite from 'expo-sqlite/next';
 import { Report, Evidence, ScoringResult } from '@scamsight/shared';
 
 const DB_NAME = 'scamsight.db';
 
+// Define the row type for reports
+interface ReportRow {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  evidence: string;
+  result: string;
+}
+
+// Define the row type for photos
+interface PhotoRow {
+  id: string;
+  report_id: string;
+  uri: string;
+  perceptual_hash: string | null;
+}
+
 export class Database {
   private db: SQLite.SQLiteDatabase | null = null;
+  private initPromise: Promise<void> | null = null;
 
-  async init() {
+  async init(): Promise<void> {
     this.db = await SQLite.openDatabaseAsync(DB_NAME);
     await this.createTables();
   }
 
-  private async createTables() {
+  private async ensureInit(): Promise<void> {
+    if (this.db) return;
+    if (!this.initPromise) {
+      this.initPromise = this.init();
+    }
+    await this.initPromise;
+  }
+
+  private async createTables(): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
     await this.db.execAsync(`
@@ -50,6 +76,7 @@ export class Database {
   }
 
   async saveReport(report: Report): Promise<void> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
 
     const evidenceJson = JSON.stringify(report.evidence);
@@ -58,28 +85,24 @@ export class Database {
     await this.db.runAsync(
       `INSERT OR REPLACE INTO reports (id, platform, url, created_at, updated_at, evidence, result)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        report.id,
-        report.evidence.platform,
-        report.evidence.url,
-        report.createdAt,
-        report.updatedAt,
-        evidenceJson,
-        resultJson,
-      ]
+      report.id,
+      report.evidence.platform,
+      report.evidence.url,
+      report.createdAt,
+      report.updatedAt,
+      evidenceJson,
+      resultJson
     );
   }
 
   async getReport(id: string): Promise<Report | null> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
 
-    const result = await this.db.getFirstAsync<{
-      id: string;
-      created_at: string;
-      updated_at: string;
-      evidence: string;
-      result: string;
-    }>('SELECT * FROM reports WHERE id = ?', [id]);
+    const result = await this.db.getFirstAsync<ReportRow>(
+      'SELECT * FROM reports WHERE id = ?',
+      id
+    );
 
     if (!result) return null;
 
@@ -93,17 +116,16 @@ export class Database {
   }
 
   async getAllReports(limit = 50, offset = 0): Promise<Report[]> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
 
-    const results = await this.db.getAllAsync<{
-      id: string;
-      created_at: string;
-      updated_at: string;
-      evidence: string;
-      result: string;
-    }>('SELECT * FROM reports ORDER BY created_at DESC LIMIT ? OFFSET ?', [limit, offset]);
+    const results = await this.db.getAllAsync<ReportRow>(
+      'SELECT * FROM reports ORDER BY created_at DESC LIMIT ? OFFSET ?',
+      limit,
+      offset
+    );
 
-    return results.map((row) => ({
+    return results.map((row: ReportRow) => ({
       id: row.id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -113,23 +135,19 @@ export class Database {
   }
 
   async searchReports(query: string): Promise<Report[]> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
 
-    const results = await this.db.getAllAsync<{
-      id: string;
-      created_at: string;
-      updated_at: string;
-      evidence: string;
-      result: string;
-    }>(
+    const results = await this.db.getAllAsync<ReportRow>(
       `SELECT * FROM reports
        WHERE evidence LIKE ? OR url LIKE ?
        ORDER BY created_at DESC
        LIMIT 50`,
-      [`%${query}%`, `%${query}%`]
+      `%${query}%`,
+      `%${query}%`
     );
 
-    return results.map((row) => ({
+    return results.map((row: ReportRow) => ({
       id: row.id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -142,10 +160,11 @@ export class Database {
     platform?: string;
     riskLevel?: string;
   }): Promise<Report[]> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
 
     let sql = 'SELECT * FROM reports WHERE 1=1';
-    const params: any[] = [];
+    const params: (string | number)[] = [];
 
     if (filters.platform) {
       sql += ' AND platform = ?';
@@ -159,15 +178,9 @@ export class Database {
 
     sql += ' ORDER BY created_at DESC LIMIT 50';
 
-    const results = await this.db.getAllAsync<{
-      id: string;
-      created_at: string;
-      updated_at: string;
-      evidence: string;
-      result: string;
-    }>(sql, params);
+    const results = await this.db.getAllAsync<ReportRow>(sql, ...params);
 
-    return results.map((row) => ({
+    return results.map((row: ReportRow) => ({
       id: row.id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -177,11 +190,13 @@ export class Database {
   }
 
   async deleteReport(id: string): Promise<void> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
-    await this.db.runAsync('DELETE FROM reports WHERE id = ?', [id]);
+    await this.db.runAsync('DELETE FROM reports WHERE id = ?', id);
   }
 
   async deleteAllReports(): Promise<void> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
     await this.db.runAsync('DELETE FROM reports');
     await this.db.runAsync('DELETE FROM photos');
@@ -193,12 +208,17 @@ export class Database {
     uri: string;
     perceptualHash?: string;
   }): Promise<void> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
 
     await this.db.runAsync(
       `INSERT OR REPLACE INTO photos (id, report_id, uri, perceptual_hash, created_at)
        VALUES (?, ?, ?, ?, ?)`,
-      [photo.id, photo.reportId, photo.uri, photo.perceptualHash || null, new Date().toISOString()]
+      photo.id,
+      photo.reportId,
+      photo.uri,
+      photo.perceptualHash || null,
+      new Date().toISOString()
     );
   }
 
@@ -206,15 +226,13 @@ export class Database {
     perceptualHash: string,
     threshold = 10
   ): Promise<Array<{ id: string; reportId: string; uri: string; hammingDistance: number }>> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
 
     // Get all photos with hashes
-    const photos = await this.db.getAllAsync<{
-      id: string;
-      report_id: string;
-      uri: string;
-      perceptual_hash: string;
-    }>('SELECT id, report_id, uri, perceptual_hash FROM photos WHERE perceptual_hash IS NOT NULL');
+    const photos = await this.db.getAllAsync<PhotoRow>(
+      'SELECT id, report_id, uri, perceptual_hash FROM photos WHERE perceptual_hash IS NOT NULL'
+    );
 
     // Calculate Hamming distance for each
     const similar: Array<{
@@ -225,14 +243,16 @@ export class Database {
     }> = [];
 
     for (const photo of photos) {
-      const distance = this.hammingDistance(perceptualHash, photo.perceptual_hash);
-      if (distance <= threshold) {
-        similar.push({
-          id: photo.id,
-          reportId: photo.report_id,
-          uri: photo.uri,
-          hammingDistance: distance,
-        });
+      if (photo.perceptual_hash) {
+        const distance = this.hammingDistance(perceptualHash, photo.perceptual_hash);
+        if (distance <= threshold) {
+          similar.push({
+            id: photo.id,
+            reportId: photo.report_id,
+            uri: photo.uri,
+            hammingDistance: distance,
+          });
+        }
       }
     }
 
@@ -252,27 +272,31 @@ export class Database {
   }
 
   async getSetting(key: string): Promise<string | null> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
 
     const result = await this.db.getFirstAsync<{ value: string }>(
       'SELECT value FROM settings WHERE key = ?',
-      [key]
+      key
     );
 
     return result ? result.value : null;
   }
 
   async setSetting(key: string, value: string): Promise<void> {
+    await this.ensureInit();
     if (!this.db) throw new Error('Database not initialized');
 
     await this.db.runAsync(
       `INSERT OR REPLACE INTO settings (key, value, updated_at)
        VALUES (?, ?, ?)`,
-      [key, value, new Date().toISOString()]
+      key,
+      value,
+      new Date().toISOString()
     );
   }
 
-  async close() {
+  async close(): Promise<void> {
     if (this.db) {
       await this.db.closeAsync();
       this.db = null;
