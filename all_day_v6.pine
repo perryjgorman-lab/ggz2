@@ -192,12 +192,16 @@ bool shortSignalValid = baseShortSignal and not baseLongSignal
 bool canEnterThisBar = not alreadyEnteredThisBar
 
 // PASS 1: Same-bar reversal control
-// If allowSameBarReversal is false and we exited this bar, don't enter
+// If allowSameBarReversal is false and we exited this bar, don't re-enter
+// This prevents close+reverse on the same candle
 bool reversalAllowed = allowSameBarReversal or not exitedThisBar
 
 // Final entry conditions with all guards
-bool longCondition  = longSignalValid and canEnterThisBar and reversalAllowed and (isFlat or (isShortPos and allowSameBarReversal))
-bool shortCondition = shortSignalValid and canEnterThisBar and reversalAllowed and (isFlat or (isLongPos and allowSameBarReversal))
+// Note: strategy.entry() automatically handles position reversal (closes opposite position)
+// pyramiding=0 prevents adding to same direction
+// We only need to guard against: (1) multiple entries same bar, (2) re-entry after exit same bar
+bool longCondition  = longSignalValid and canEnterThisBar and reversalAllowed
+bool shortCondition = shortSignalValid and canEnterThisBar and reversalAllowed
 
 // ============================================================================
 // Stop/Target Calculations
@@ -217,32 +221,36 @@ var string debugShortReasons = ""
 if enableDebug
     // Build long signal breakdown
     string lr = ""
-    lr := lr + (longRetest ? "Retest:Y " : "Retest:N ")
-    lr := lr + (isUptrend ? "Trend:Y " : "Trend:N ")
+    lr := lr + (longRetest ? "Ret:Y " : "Ret:N ")
+    lr := lr + (isUptrend ? "Tr:Y " : "Tr:N ")
     lr := lr + (momentumLongCondition ? "Mom:Y " : "Mom:N ")
-    lr := lr + (momValue > 0 ? "MomVal:Y " : "MomVal:N ")
+    lr := lr + (momValue > 0 ? "MV:Y " : "MV:N ")
     lr := lr + (validVolume ? "Vol:Y " : "Vol:N ")
     lr := lr + (vixConditionPasses ? "VIX:Y " : "VIX:N ")
     debugLongReasons := lr
 
     // Build short signal breakdown
     string sr = ""
-    sr := sr + (shortRetest ? "Retest:Y " : "Retest:N ")
-    sr := sr + (isDowntrend ? "Trend:Y " : "Trend:N ")
+    sr := sr + (shortRetest ? "Ret:Y " : "Ret:N ")
+    sr := sr + (isDowntrend ? "Tr:Y " : "Tr:N ")
     sr := sr + (momentumShortCondition ? "Mom:Y " : "Mom:N ")
-    sr := sr + (momValue < 0 ? "MomVal:Y " : "MomVal:N ")
+    sr := sr + (momValue < 0 ? "MV:Y " : "MV:N ")
     sr := sr + (validVolume ? "Vol:Y " : "Vol:N ")
     sr := sr + (vixConditionPasses ? "VIX:Y " : "VIX:N ")
     debugShortReasons := sr
 
     // Entry block reasons
     string br = ""
+    if not indicatorsWarmedUp
+        br := br + "Warmup "
+    if na(smoothedATR)
+        br := br + "ATR_NA "
     if alreadyEnteredThisBar
         br := br + "EntryLock "
     if exitedThisBar and not allowSameBarReversal
         br := br + "NoSameBarRev "
     if baseLongSignal and baseShortSignal
-        br := br + "MutualExclusion "
+        br := br + "MutualExcl "
     debugEntryBlockReason := br == "" ? "None" : br
 
 // ============================================================================
@@ -399,7 +407,7 @@ var table debugTable = na
 
 if enableDebug
     if na(debugTable)
-        debugTable := table.new(position.top_right, 2, 12, bgcolor=color.new(color.black, 80), border_width=1)
+        debugTable := table.new(position.top_right, 2, 14, bgcolor=color.new(color.black, 80), border_width=1)
 
     // Update table content
     table.cell(debugTable, 0, 0, "Metric", text_color=color.white, text_size=size.small)
@@ -408,35 +416,41 @@ if enableDebug
     table.cell(debugTable, 0, 1, "Position", text_color=color.gray, text_size=size.tiny)
     table.cell(debugTable, 1, 1, isLongPos ? "LONG" : isShortPos ? "SHORT" : "FLAT", text_color=isLongPos ? color.green : isShortPos ? color.red : color.gray, text_size=size.tiny)
 
-    table.cell(debugTable, 0, 2, "Base Long Signal", text_color=color.gray, text_size=size.tiny)
-    table.cell(debugTable, 1, 2, baseLongSignal ? "YES" : "NO", text_color=baseLongSignal ? color.green : color.gray, text_size=size.tiny)
+    table.cell(debugTable, 0, 2, "Warmup OK", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 2, indicatorsWarmedUp ? "YES" : "NO (bar " + str.tostring(bar_index) + ")", text_color=indicatorsWarmedUp ? color.green : color.red, text_size=size.tiny)
 
-    table.cell(debugTable, 0, 3, "Base Short Signal", text_color=color.gray, text_size=size.tiny)
-    table.cell(debugTable, 1, 3, baseShortSignal ? "YES" : "NO", text_color=baseShortSignal ? color.red : color.gray, text_size=size.tiny)
+    table.cell(debugTable, 0, 3, "Base Long Signal", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 3, baseLongSignal ? "YES" : "NO", text_color=baseLongSignal ? color.green : color.gray, text_size=size.tiny)
 
-    table.cell(debugTable, 0, 4, "Long Reasons", text_color=color.gray, text_size=size.tiny)
-    table.cell(debugTable, 1, 4, debugLongReasons, text_color=color.white, text_size=size.tiny)
+    table.cell(debugTable, 0, 4, "Base Short Signal", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 4, baseShortSignal ? "YES" : "NO", text_color=baseShortSignal ? color.red : color.gray, text_size=size.tiny)
 
-    table.cell(debugTable, 0, 5, "Short Reasons", text_color=color.gray, text_size=size.tiny)
-    table.cell(debugTable, 1, 5, debugShortReasons, text_color=color.white, text_size=size.tiny)
+    table.cell(debugTable, 0, 5, "Long Components", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 5, debugLongReasons, text_color=color.white, text_size=size.tiny)
 
-    table.cell(debugTable, 0, 6, "Entry Blocked By", text_color=color.gray, text_size=size.tiny)
-    table.cell(debugTable, 1, 6, debugEntryBlockReason, text_color=color.orange, text_size=size.tiny)
+    table.cell(debugTable, 0, 6, "Short Components", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 6, debugShortReasons, text_color=color.white, text_size=size.tiny)
 
-    table.cell(debugTable, 0, 7, "Last Entry Bar", text_color=color.gray, text_size=size.tiny)
-    table.cell(debugTable, 1, 7, str.tostring(lastEntryBar), text_color=color.white, text_size=size.tiny)
+    table.cell(debugTable, 0, 7, "Entry Blocked By", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 7, debugEntryBlockReason, text_color=color.orange, text_size=size.tiny)
 
-    table.cell(debugTable, 0, 8, "Last Exit Bar", text_color=color.gray, text_size=size.tiny)
-    table.cell(debugTable, 1, 8, str.tostring(lastExitBar), text_color=color.white, text_size=size.tiny)
+    table.cell(debugTable, 0, 8, "Final Long Cond", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 8, longCondition ? "VALID" : "blocked", text_color=longCondition ? color.green : color.gray, text_size=size.tiny)
 
-    table.cell(debugTable, 0, 9, "Last Exit Reason", text_color=color.gray, text_size=size.tiny)
-    table.cell(debugTable, 1, 9, lastExitReason, text_color=color.white, text_size=size.tiny)
+    table.cell(debugTable, 0, 9, "Final Short Cond", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 9, shortCondition ? "VALID" : "blocked", text_color=shortCondition ? color.red : color.gray, text_size=size.tiny)
 
-    table.cell(debugTable, 0, 10, "VIX Raw", text_color=color.gray, text_size=size.tiny)
-    table.cell(debugTable, 1, 10, na(vixRaw) ? "NA" : str.tostring(vixRaw, "#.##"), text_color=color.white, text_size=size.tiny)
+    table.cell(debugTable, 0, 10, "Last Entry Bar", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 10, str.tostring(lastEntryBar), text_color=color.white, text_size=size.tiny)
 
-    table.cell(debugTable, 0, 11, "VIX Threshold", text_color=color.gray, text_size=size.tiny)
-    table.cell(debugTable, 1, 11, na(vixThresholdRaw) ? "NA (pass)" : str.tostring(vixThresholdRaw, "#.##"), text_color=color.white, text_size=size.tiny)
+    table.cell(debugTable, 0, 11, "Last Exit Reason", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 11, lastExitReason, text_color=color.white, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 12, "VIX Raw", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 12, na(vixRaw) ? "NA" : str.tostring(vixRaw, "#.##"), text_color=color.white, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 13, "VIX Threshold", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 13, na(vixThresholdRaw) ? "NA (pass)" : str.tostring(vixThresholdRaw, "#.##"), text_color=color.white, text_size=size.tiny)
 
 // ============================================================================
 // END OF SCRIPT

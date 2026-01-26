@@ -1,5 +1,32 @@
 # all_day_v6.pine - Changelog
 
+## HOTFIX: Entry Condition Bug (Post-Initial Release)
+
+**Issue:** No trades were executing in backtesting.
+
+**Root Cause:** Lines 199-200 had overly restrictive logic:
+```pine
+// BROKEN:
+bool longCondition = ... and (isFlat or (isShortPos and allowSameBarReversal))
+```
+
+Since `allowSameBarReversal` defaults to `false`, the condition `(isShortPos and false)` always evaluates to `false`. This meant entries were ONLY allowed when flat - the strategy could never reverse positions.
+
+**Fix:** Removed the unnecessary position check. The `allowSameBarReversal` guard already prevents same-bar close+reverse via `exitedThisBar` tracking. `strategy.entry()` automatically handles position reversals, and `pyramiding=0` prevents same-direction additions.
+
+```pine
+// FIXED:
+bool longCondition = longSignalValid and canEnterThisBar and reversalAllowed
+bool shortCondition = shortSignalValid and canEnterThisBar and reversalAllowed
+```
+
+**Additional Improvements:**
+- Added warmup status and ATR_NA check to debug block reasons
+- Added "Final Long/Short Cond" rows to debug table showing actual gated status
+- Shortened debug labels to fit better in table
+
+---
+
 ## PASS 0: v5 to v6 Migration
 
 **Changes:**
