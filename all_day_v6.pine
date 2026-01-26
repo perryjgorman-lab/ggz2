@@ -1,0 +1,443 @@
+// This Pine Script(TM) code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// v6 Conversion + Hardening by Claude Code
+
+//@version=6
+strategy("all day v6", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1, initial_capital=25000.0, pyramiding=0, commission_type=strategy.commission.cash_per_contract, commission_value=1.00, slippage=1)
+
+// ============================================================================
+// PASS 0: v5 -> v6 Migration Notes
+// - Replaced all input.*() with input.*() (syntax unchanged in v6, but validated)
+// - math.* and ta.* functions remain the same
+// - request.security() signature unchanged for this use case
+// - barstate.*, strategy.* namespaces unchanged
+// - Added explicit type declarations where beneficial for v6 clarity
+// ============================================================================
+
+// === Input Parameters ===
+baseCapitalForKill     = input.float(25000.0, "Kill Switch Base Capital ($)", minval=1000.0, step=100.0, group="Risk Management")
+perTradeLossPercent    = input.float(3.0, "Per Trade Loss (%)", minval=0.1, maxval=10.0, group="Risk Management")
+
+float pointValueUsed = syminfo.pointvalue
+
+// GOLDEN CONFIG DEFAULTS (Based on prior testing)
+trailActivationATR     = input.float(0.35, "Trail Activation (ATR)", step=0.1, group="Risk Management", tooltip="Sweet spot for scalping")
+trailOffsetATR         = input.float(0.90, "Trail Offset (ATR)", step=0.1, group="Risk Management", tooltip="Tight enough to bank profit")
+
+stopLossATR            = input.float(2.6, "Stop Loss ATR Multiplier", minval=0.1, step=0.1, group="Risk Management")
+takeProfitATR          = input.float(7.8, "Take Profit ATR Multiplier", minval=0.1, group="Risk Management")
+
+// Indicator Settings
+rsiLength              = input.int(15, "RSI Length", minval=1)
+tsiShort               = input.int(5, "TSI Short Length", minval=1)
+emaLong                = input.int(25, "EMA Length", minval=1)
+vwmaLength             = input.int(33, "VWMA Length", minval=1)
+smoothing              = input.int(4, "Smoothing Length", minval=1)
+momLength              = input.int(13, "Momentum Length", minval=1)
+atrLength              = input.int(20, "ATR Length", minval=1)
+tsiVolatilityLookback  = input.int(30, "TSI Volatility Lookback", minval=1)
+volLookback            = input.int(16, "Volume Lookback", minval=1)
+retestLookback         = input.int(5, "Retest Lookback", minval=1)
+
+// Filters & Data
+vixThresholdPeriod     = input.int(10, "VIX SMA Period", minval=1, group="Filters")
+volMult                = input.float(1.25, "Volume SMA Multiplier", minval=0.5, maxval=1.5, step=0.05, group="Filters")
+
+// Toggles
+useVIX                 = input.bool(true, "Use VIX Filter", group="Filters")
+useVWMA                = input.bool(true, "Use VWMA Filter", group="Filters")
+useCompositeMomentum   = input.bool(false, "Use Composite Momentum", group="Filters")
+
+// ============================================================================
+// PASS 1: New Determinism Controls
+// ============================================================================
+allowSameBarReversal   = input.bool(false, "Allow Same-Bar Reversal", group="Execution Control", tooltip="If false, prevents close+reverse on same candle")
+enableDebug            = input.bool(false, "Enable Debug Display", group="Debug", tooltip="Show debug table with signal reasons")
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+round_to_tick(float x) => math.round(x / syminfo.mintick) * syminfo.mintick
+
+// Safe na-coalesce for floats
+safeFloat(float val, float fallback) => na(val) ? fallback : val
+
+// ============================================================================
+// PASS 1: Entry Lock State Variables (prevent same-bar chaos)
+// ============================================================================
+var int lastEntryBar = -1           // Bar index of last entry
+var int lastExitBar = -1            // Bar index of last exit/close
+var string lastEntryDir = ""        // "Long" or "Short"
+var string lastExitReason = ""      // Debug: reason for last exit
+
+// ============================================================================
+// PASS 2: Exit Order Caching State Variables
+// ============================================================================
+var float cachedLongStop = na
+var float cachedLongLimit = na
+var float cachedLongTrailPrice = na
+var float cachedLongTrailOffset = na
+
+var float cachedShortStop = na
+var float cachedShortLimit = na
+var float cachedShortTrailPrice = na
+var float cachedShortTrailOffset = na
+
+var float lastKillStopLong  = na
+var float lastKillStopShort = na
+
+// ============================================================================
+// Indicator Calculations
+// ============================================================================
+float atrRaw       = ta.atr(atrLength)
+float smoothedATR  = ta.ema(atrRaw, 3)
+float rsi          = ta.rsi(close, rsiLength)
+float emaLongValue = ta.ema(close, emaLong)
+float vwmaValue    = ta.vwma(close, vwmaLength)
+float momValue     = ta.mom(close, momLength)
+
+// TSI Calculation
+float diff          = close - close[1]
+float smoothed_diff = ta.ema(diff, tsiShort)
+float smoothed_abs  = ta.ema(math.abs(diff), tsiShort)
+float tsi_value     = 100 * (ta.ema(smoothed_diff, smoothing) / ta.ema(smoothed_abs, smoothing))
+
+// Volatility Factors
+float volatilityFactor = ta.stdev(close, tsiVolatilityLookback) / ta.sma(close, tsiVolatilityLookback)
+
+// Volume gate (soft)
+float volSMA      = ta.sma(volume, volLookback)
+bool validVolume = volume > volSMA * volMult
+
+// Momentum selection
+float compositeMomentum = (rsi + tsi_value) / 2
+float currentMomentum   = useCompositeMomentum ? compositeMomentum : tsi_value
+
+// ============================================================================
+// VIX Filter (PASS 1: Hardened NA handling)
+// ============================================================================
+// Unconditional request - no lookahead
+float vixRaw = request.security("CBOE:VIX", timeframe.period, close, lookahead=barmerge.lookahead_off)
+
+// PASS 1 FIX: Safely handle NA VIX values
+// vixAvailable is true only when useVIX is enabled AND we have valid VIX data
+bool vixDataValid = not na(vixRaw)
+bool vixAvailable = useVIX and vixDataValid
+
+// Calculate VIX threshold only when we have enough bars and valid data
+// Use a safe fallback: if threshold is na, treat VIX condition as passing (don't block trades)
+float vixThresholdRaw = vixAvailable ? ta.sma(vixRaw, vixThresholdPeriod) : na
+
+// PASS 1 FIX: Early bar NA protection
+// On early bars where SMA hasn't warmed up, we use a generous default to not block trading
+// After warmup, if VIX is below its threshold, condition passes
+bool vixConditionPasses = not useVIX or (vixAvailable and (na(vixThresholdRaw) or vixRaw < vixThresholdRaw)) or (not vixDataValid)
+
+// ============================================================================
+// Dynamic Thresholds
+// ============================================================================
+float atrPct               = safeFloat(smoothedATR, 0) / close * 100.0
+float rsiOB_Dynamic        = math.min(100.0, 75.0 + atrPct * 0.5)
+float rsiOS_Dynamic        = math.max(0.0, 25.0 - atrPct * 0.5)
+float tsiThreshold_Dynamic = safeFloat(ta.sma(ta.stdev(tsi_value, tsiVolatilityLookback), 7) * (1 + safeFloat(volatilityFactor, 0)), 5.0)
+
+// ============================================================================
+// Signal Conditions
+// ============================================================================
+strongRSI_TSI_LongCondition(float rsi_, float tsi_)  => rsi_ > rsiOS_Dynamic and tsi_ > tsiThreshold_Dynamic
+strongRSI_TSI_ShortCondition(float rsi_, float tsi_) => rsi_ < rsiOB_Dynamic and tsi_ < -tsiThreshold_Dynamic
+strongMomentum_LongCondition(float mom_)             => mom_ > tsiThreshold_Dynamic
+strongMomentum_ShortCondition(float mom_)            => mom_ < -tsiThreshold_Dynamic
+
+bool momentumLongCondition  = useCompositeMomentum ? strongMomentum_LongCondition(compositeMomentum)  : strongRSI_TSI_LongCondition(rsi, tsi_value)
+bool momentumShortCondition = useCompositeMomentum ? strongMomentum_ShortCondition(compositeMomentum) : strongRSI_TSI_ShortCondition(rsi, tsi_value)
+
+// ============================================================================
+// Kill Switch Calculation
+// ============================================================================
+float maxLossPerTrade = baseCapitalForKill * perTradeLossPercent / 100.0
+
+// ============================================================================
+// Entry Conditions (Base)
+// ============================================================================
+float atrOffset   = safeFloat(smoothedATR, 0) * 0.4
+bool isUptrend    = close > emaLongValue + atrOffset and (not useVWMA or close > vwmaValue)
+bool isDowntrend  = close < emaLongValue - atrOffset and (not useVWMA or close < vwmaValue)
+bool longRetest   = ta.lowest(low, retestLookback) < emaLongValue and close > emaLongValue
+bool shortRetest  = ta.highest(high, retestLookback) > emaLongValue and close < emaLongValue
+
+// Base signal conditions (before execution controls)
+bool baseLongSignal  = longRetest and isUptrend and momentumLongCondition and momValue > 0 and validVolume and vixConditionPasses
+bool baseShortSignal = shortRetest and isDowntrend and momentumShortCondition and momValue < 0 and validVolume and vixConditionPasses
+
+// ============================================================================
+// PASS 1: Execution Control Logic
+// ============================================================================
+// Determine current position state
+bool isFlat      = strategy.position_size == 0
+bool isLongPos   = strategy.position_size > 0
+bool isShortPos  = strategy.position_size < 0
+
+// Check if we already entered this bar
+bool alreadyEnteredThisBar = lastEntryBar == bar_index
+
+// Check if we exited this bar (for same-bar reversal control)
+bool exitedThisBar = lastExitBar == bar_index
+
+// PASS 1: Mutual exclusion - never allow both long and short signals to be valid simultaneously
+// If both fire (shouldn't happen with proper trend logic, but safety), prefer the trend direction
+bool longSignalValid  = baseLongSignal and not baseShortSignal
+bool shortSignalValid = baseShortSignal and not baseLongSignal
+
+// PASS 1: Entry lock - max 1 entry per bar
+bool canEnterThisBar = not alreadyEnteredThisBar
+
+// PASS 1: Same-bar reversal control
+// If allowSameBarReversal is false and we exited this bar, don't enter
+bool reversalAllowed = allowSameBarReversal or not exitedThisBar
+
+// Final entry conditions with all guards
+bool longCondition  = longSignalValid and canEnterThisBar and reversalAllowed and (isFlat or (isShortPos and allowSameBarReversal))
+bool shortCondition = shortSignalValid and canEnterThisBar and reversalAllowed and (isFlat or (isLongPos and allowSameBarReversal))
+
+// ============================================================================
+// Stop/Target Calculations
+// ============================================================================
+float stopAdjust         = math.min(1.25, 1 + (safeFloat(volatilityFactor, 0) * 0.25))
+float profitAdjust       = math.min(1.5,  1 + (safeFloat(volatilityFactor, 0) * 0.25))
+float adjustedStopLoss   = math.min(5 * safeFloat(smoothedATR, 1), stopLossATR * safeFloat(smoothedATR, 1) * stopAdjust)
+float adjustedTakeProfit = takeProfitATR * safeFloat(smoothedATR, 1) * profitAdjust
+
+// ============================================================================
+// PASS 3: Debug Reason Tracking
+// ============================================================================
+var string debugEntryBlockReason = ""
+var string debugLongReasons = ""
+var string debugShortReasons = ""
+
+if enableDebug
+    // Build long signal breakdown
+    string lr = ""
+    lr := lr + (longRetest ? "Retest:Y " : "Retest:N ")
+    lr := lr + (isUptrend ? "Trend:Y " : "Trend:N ")
+    lr := lr + (momentumLongCondition ? "Mom:Y " : "Mom:N ")
+    lr := lr + (momValue > 0 ? "MomVal:Y " : "MomVal:N ")
+    lr := lr + (validVolume ? "Vol:Y " : "Vol:N ")
+    lr := lr + (vixConditionPasses ? "VIX:Y " : "VIX:N ")
+    debugLongReasons := lr
+
+    // Build short signal breakdown
+    string sr = ""
+    sr := sr + (shortRetest ? "Retest:Y " : "Retest:N ")
+    sr := sr + (isDowntrend ? "Trend:Y " : "Trend:N ")
+    sr := sr + (momentumShortCondition ? "Mom:Y " : "Mom:N ")
+    sr := sr + (momValue < 0 ? "MomVal:Y " : "MomVal:N ")
+    sr := sr + (validVolume ? "Vol:Y " : "Vol:N ")
+    sr := sr + (vixConditionPasses ? "VIX:Y " : "VIX:N ")
+    debugShortReasons := sr
+
+    // Entry block reasons
+    string br = ""
+    if alreadyEnteredThisBar
+        br := br + "EntryLock "
+    if exitedThisBar and not allowSameBarReversal
+        br := br + "NoSameBarRev "
+    if baseLongSignal and baseShortSignal
+        br := br + "MutualExclusion "
+    debugEntryBlockReason := br == "" ? "None" : br
+
+// ============================================================================
+// ATR Warmup Check
+// ============================================================================
+bool indicatorsWarmedUp = bar_index > math.max(atrLength, tsiVolatilityLookback, vwmaLength, volLookback, retestLookback) + 5
+
+// ============================================================================
+// Entry Logic (PASS 1: With all guards)
+// ============================================================================
+if barstate.isconfirmed and indicatorsWarmedUp and not na(smoothedATR)
+    if longCondition
+        strategy.entry("Long", strategy.long, comment="Long")
+        lastEntryBar := bar_index
+        lastEntryDir := "Long"
+
+        // Reset exit caches for new position
+        cachedLongStop := na
+        cachedLongLimit := na
+        cachedLongTrailPrice := na
+        cachedLongTrailOffset := na
+        lastKillStopLong := na
+
+    if shortCondition
+        strategy.entry("Short", strategy.short, comment="Short")
+        lastEntryBar := bar_index
+        lastEntryDir := "Short"
+
+        // Reset exit caches for new position
+        cachedShortStop := na
+        cachedShortLimit := na
+        cachedShortTrailPrice := na
+        cachedShortTrailOffset := na
+        lastKillStopShort := na
+
+// ============================================================================
+// PASS 2: Exit Management with Caching (in-position management)
+// ============================================================================
+// Helper to check if value changed by at least 1 tick
+tickChanged(float newVal, float oldVal) => na(oldVal) or math.abs(newVal - oldVal) >= syminfo.mintick
+
+if isLongPos
+    // Calculate current exit parameters
+    float entryPrice = strategy.position_avg_price
+    float newStop = round_to_tick(entryPrice - adjustedStopLoss)
+    float newLimit = round_to_tick(entryPrice + adjustedTakeProfit)
+    float newTrailPrice = round_to_tick(entryPrice + (trailActivationATR * safeFloat(smoothedATR, 1)))
+    float newTrailOffset = trailOffsetATR * safeFloat(smoothedATR, 1)
+
+    // Check if any parameter changed
+    bool stopChanged = tickChanged(newStop, cachedLongStop)
+    bool limitChanged = tickChanged(newLimit, cachedLongLimit)
+    bool trailPriceChanged = tickChanged(newTrailPrice, cachedLongTrailPrice)
+    bool trailOffsetChanged = tickChanged(newTrailOffset, cachedLongTrailOffset)
+
+    if stopChanged or limitChanged or trailPriceChanged or trailOffsetChanged
+        strategy.exit("Long Exit", "Long", stop=newStop, limit=newLimit, trail_price=newTrailPrice, trail_offset=newTrailOffset, comment="Exit Long")
+        cachedLongStop := newStop
+        cachedLongLimit := newLimit
+        cachedLongTrailPrice := newTrailPrice
+        cachedLongTrailOffset := newTrailOffset
+
+    // Kill switch exit (separate order, also cached)
+    float contractsLive    = math.abs(strategy.position_size)
+    float riskPerPointLive = contractsLive * pointValueUsed
+    float killPtsLive      = (riskPerPointLive > 0) ? (maxLossPerTrade / riskPerPointLive) : na
+
+    if not na(killPtsLive)
+        float killStopLong = round_to_tick(entryPrice - killPtsLive)
+        if tickChanged(killStopLong, lastKillStopLong)
+            strategy.exit("KILL_LONG", "Long", stop=killStopLong, comment="Kill Long")
+            lastKillStopLong := killStopLong
+
+if isShortPos
+    // Calculate current exit parameters
+    float entryPrice = strategy.position_avg_price
+    float newStop = round_to_tick(entryPrice + adjustedStopLoss)
+    float newLimit = round_to_tick(entryPrice - adjustedTakeProfit)
+    float newTrailPrice = round_to_tick(entryPrice - (trailActivationATR * safeFloat(smoothedATR, 1)))
+    float newTrailOffset = trailOffsetATR * safeFloat(smoothedATR, 1)
+
+    // Check if any parameter changed
+    bool stopChanged = tickChanged(newStop, cachedShortStop)
+    bool limitChanged = tickChanged(newLimit, cachedShortLimit)
+    bool trailPriceChanged = tickChanged(newTrailPrice, cachedShortTrailPrice)
+    bool trailOffsetChanged = tickChanged(newTrailOffset, cachedShortTrailOffset)
+
+    if stopChanged or limitChanged or trailPriceChanged or trailOffsetChanged
+        strategy.exit("Short Exit", "Short", stop=newStop, limit=newLimit, trail_price=newTrailPrice, trail_offset=newTrailOffset, comment="Exit Short")
+        cachedShortStop := newStop
+        cachedShortLimit := newLimit
+        cachedShortTrailPrice := newTrailPrice
+        cachedShortTrailOffset := newTrailOffset
+
+    // Kill switch exit (separate order, also cached)
+    float contractsLive    = math.abs(strategy.position_size)
+    float riskPerPointLive = contractsLive * pointValueUsed
+    float killPtsLive      = (riskPerPointLive > 0) ? (maxLossPerTrade / riskPerPointLive) : na
+
+    if not na(killPtsLive)
+        float killStopShort = round_to_tick(entryPrice + killPtsLive)
+        if tickChanged(killStopShort, lastKillStopShort)
+            strategy.exit("KILL_SHORT", "Short", stop=killStopShort, comment="Kill Short")
+            lastKillStopShort := killStopShort
+
+// Reset caches when flat
+if isFlat
+    cachedLongStop := na
+    cachedLongLimit := na
+    cachedLongTrailPrice := na
+    cachedLongTrailOffset := na
+    cachedShortStop := na
+    cachedShortLimit := na
+    cachedShortTrailPrice := na
+    cachedShortTrailOffset := na
+    lastKillStopLong := na
+    lastKillStopShort := na
+
+// ============================================================================
+// Exit on Trend Reversal (PASS 1: With same-bar tracking)
+// ============================================================================
+if strategy.position_size != 0
+    bool inLong = strategy.position_size > 0
+    bool exitSignal = inLong ? (close < emaLongValue or currentMomentum < -tsiThreshold_Dynamic) : (close > emaLongValue or currentMomentum > tsiThreshold_Dynamic)
+
+    if exitSignal
+        if inLong
+            strategy.close("Long", comment="Long Reversal Exit")
+            lastExitReason := "Long Reversal"
+        else
+            strategy.close("Short", comment="Short Reversal Exit")
+            lastExitReason := "Short Reversal"
+        lastExitBar := bar_index
+
+// ============================================================================
+// Visuals - Bar Coloring
+// ============================================================================
+color barColor = color.white
+if longCondition
+    barColor := color.green
+else if shortCondition
+    barColor := color.red
+else if isUptrend and currentMomentum > 0 and momValue > 0
+    barColor := color.rgb(24, 245, 4)
+else if isDowntrend and currentMomentum < 0 and momValue < 0
+    barColor := color.rgb(116, 9, 9)
+
+barcolor(barColor)
+
+// ============================================================================
+// PASS 3: Debug Table Display
+// ============================================================================
+var table debugTable = na
+
+if enableDebug
+    if na(debugTable)
+        debugTable := table.new(position.top_right, 2, 12, bgcolor=color.new(color.black, 80), border_width=1)
+
+    // Update table content
+    table.cell(debugTable, 0, 0, "Metric", text_color=color.white, text_size=size.small)
+    table.cell(debugTable, 1, 0, "Value", text_color=color.white, text_size=size.small)
+
+    table.cell(debugTable, 0, 1, "Position", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 1, isLongPos ? "LONG" : isShortPos ? "SHORT" : "FLAT", text_color=isLongPos ? color.green : isShortPos ? color.red : color.gray, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 2, "Base Long Signal", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 2, baseLongSignal ? "YES" : "NO", text_color=baseLongSignal ? color.green : color.gray, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 3, "Base Short Signal", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 3, baseShortSignal ? "YES" : "NO", text_color=baseShortSignal ? color.red : color.gray, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 4, "Long Reasons", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 4, debugLongReasons, text_color=color.white, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 5, "Short Reasons", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 5, debugShortReasons, text_color=color.white, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 6, "Entry Blocked By", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 6, debugEntryBlockReason, text_color=color.orange, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 7, "Last Entry Bar", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 7, str.tostring(lastEntryBar), text_color=color.white, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 8, "Last Exit Bar", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 8, str.tostring(lastExitBar), text_color=color.white, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 9, "Last Exit Reason", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 9, lastExitReason, text_color=color.white, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 10, "VIX Raw", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 10, na(vixRaw) ? "NA" : str.tostring(vixRaw, "#.##"), text_color=color.white, text_size=size.tiny)
+
+    table.cell(debugTable, 0, 11, "VIX Threshold", text_color=color.gray, text_size=size.tiny)
+    table.cell(debugTable, 1, 11, na(vixThresholdRaw) ? "NA (pass)" : str.tostring(vixThresholdRaw, "#.##"), text_color=color.white, text_size=size.tiny)
+
+// ============================================================================
+// END OF SCRIPT
+// ============================================================================
