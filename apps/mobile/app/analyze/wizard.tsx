@@ -185,7 +185,6 @@ export default function WizardScreen() {
       }
     } catch (error) {
       console.error('Autofill error:', error);
-      setShowWebViewFallback(true);
       Alert.alert(
         'Autofill Failed',
         'Could not extract details. Please enter them manually.',

@@ -23,16 +23,41 @@ export interface UnfurlResponse {
 }
 
 // Default API URL - in production this would come from config
+// Note: For iOS simulator, use localhost. For physical devices, use your machine's IP.
+// Android emulator uses 10.0.2.2 to reach host machine's localhost.
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
+const getDevApiUrl = (): string => {
+  // Android emulator needs special IP to reach host
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:3000';
+  }
+
+  // Try to get the host machine's IP from Expo manifest
+  // This works when running via Expo Go on physical devices
+  const debuggerHost = Constants.expoConfig?.hostUri?.split(':')[0];
+  if (debuggerHost) {
+    return `http://${debuggerHost}:3000`;
+  }
+
+  // Fallback for iOS simulator
+  return 'http://localhost:3000';
+};
+
 const API_BASE_URL = __DEV__
-  ? 'http://localhost:3000'
+  ? getDevApiUrl()
   : 'https://api.scamsight.app';
 
 /**
  * Call the backend unfurl endpoint
  */
 export async function unfurlUrl(url: string): Promise<UnfurlResponse> {
+  const apiUrl = `${API_BASE_URL}/v1/unfurl`;
+  console.log('[Unfurl] Calling API:', apiUrl, 'for URL:', url);
+
   try {
-    const response = await fetch(`${API_BASE_URL}/v1/unfurl`, {
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -41,6 +66,7 @@ export async function unfurlUrl(url: string): Promise<UnfurlResponse> {
     });
 
     const result = await response.json();
+    console.log('[Unfurl] API response:', JSON.stringify(result, null, 2));
 
     if (!result.success) {
       return {
@@ -60,7 +86,7 @@ export async function unfurlUrl(url: string): Promise<UnfurlResponse> {
       source: result.source || 'blocked',
     };
   } catch (error) {
-    console.error('Unfurl request failed:', error);
+    console.error('[Unfurl] Request failed:', error);
     return {
       success: false,
       data: {},
