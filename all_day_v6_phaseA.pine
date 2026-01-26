@@ -1,0 +1,178 @@
+// This Pine Script(TM) code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// PHASE A: Pure v5 -> v6 conversion with ZERO logic changes
+
+//@version=6
+strategy("all day", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1, initial_capital=25000.0, pyramiding=0, commission_type=strategy.commission.cash_per_contract, commission_value=1.00, slippage=1)
+
+// === Input Parameters ===
+baseCapitalForKill     = input.float(25000.0, "Kill Switch Base Capital ($)", minval=1000.0, step=100.0, group="Risk Management")
+perTradeLossPercent    = input.float(3.0, "Per Trade Loss (%)", minval=0.1, maxval=10.0, group="Risk Management")
+
+pointValueUsed = syminfo.pointvalue
+
+// GOLDEN CONFIG DEFAULTS (Based on prior testing)
+trailActivationATR     = input.float(0.35, "Trail Activation (ATR)", step=0.1, group="Risk Management", tooltip="Sweet spot for scalping")
+trailOffsetATR         = input.float(0.90, "Trail Offset (ATR)", step=0.1, group="Risk Management", tooltip="Tight enough to bank profit")
+
+stopLossATR            = input.float(2.6, "Stop Loss ATR Multiplier", minval=0.1, step=0.1, group="Risk Management")
+takeProfitATR          = input.float(7.8, "Take Profit ATR Multiplier", minval=0.1, group="Risk Management")
+
+// Indicator Settings
+rsiLength              = input.int(15, "RSI Length", minval=1)
+tsiShort               = input.int(5, "TSI Short Length", minval=1)
+emaLong                = input.int(25, "EMA Length", minval=1)
+vwmaLength             = input.int(33, "VWMA Length", minval=1)
+smoothing              = input.int(4, "Smoothing Length", minval=1)
+momLength              = input.int(13, "Momentum Length", minval=1)
+atrLength              = input.int(20, "ATR Length", minval=1)
+tsiVolatilityLookback  = input.int(30, "TSI Volatility Lookback", minval=1)
+volLookback            = input.int(16, "Volume Lookback", minval=1)
+retestLookback         = input.int(5, "Retest Lookback", minval=1)
+
+// Filters & Data
+vixThresholdPeriod     = input.int(10, "VIX SMA Period", minval=1, group="Filters")
+volMult                = input.float(1.25, "Volume SMA Multiplier", minval=0.5, maxval=1.5, step=0.05, group="Filters")
+
+// Toggles
+useVIX                 = input.bool(true, "Use VIX Filter", group="Filters")
+useVWMA                = input.bool(true, "Use VWMA Filter", group="Filters")
+useCompositeMomentum   = input.bool(false, "Use Composite Momentum", group="Filters")
+
+round_to_tick(x) => math.round(x / syminfo.mintick) * syminfo.mintick
+
+// === Indicator Calculations ===
+atrRaw       = ta.atr(atrLength)
+smoothedATR  = ta.ema(atrRaw, 3)
+rsi          = ta.rsi(close, rsiLength)
+emaLongValue = ta.ema(close, emaLong)
+vwmaValue    = ta.vwma(close, vwmaLength)
+momValue     = ta.mom(close, momLength)
+
+// TSI Calculation
+diff          = close - close[1]
+smoothed_diff = ta.ema(diff, tsiShort)
+smoothed_abs  = ta.ema(math.abs(diff), tsiShort)
+tsi_value     = 100 * (ta.ema(smoothed_diff, smoothing) / ta.ema(smoothed_abs, smoothing))
+
+// Volatility Factors
+volatilityFactor = ta.stdev(close, tsiVolatilityLookback) / ta.sma(close, tsiVolatilityLookback)
+
+// --- Tunable volume gate (soft) ---
+volSMA      = ta.sma(volume, volLookback)
+validVolume = volume > volSMA * volMult
+
+// Momentum selection
+compositeMomentum = (rsi + tsi_value) / 2
+currentMomentum   = useCompositeMomentum ? compositeMomentum : tsi_value
+
+// === VIX (unconditional request; masked after) ===
+// NOTE: If "CBOE:VIX" doesn't resolve on your plan, try "TVC:VIX" or "VIX".
+vixRaw = request.security("CBOE:VIX", timeframe.period, close, lookahead=barmerge.lookahead_off)
+vixAvailable = useVIX and not na(vixRaw)
+vixThreshold = vixAvailable ? ta.sma(vixRaw, vixThresholdPeriod) : na
+
+
+// === Dynamic Thresholds ===
+atrPct               = smoothedATR / close * 100.0
+rsiOB_Dynamic        = math.min(100, 75 + atrPct * 0.5)
+rsiOS_Dynamic        = math.max(0, 25 - atrPct * 0.5)
+tsiThreshold_Dynamic = ta.sma(ta.stdev(tsi_value, tsiVolatilityLookback), 7) * (1 + volatilityFactor)
+
+// === Strong Signal Conditions ===
+strongRSI_TSI_LongCondition(rsi_, tsi_)  => rsi_ > rsiOS_Dynamic and tsi_ > tsiThreshold_Dynamic
+strongRSI_TSI_ShortCondition(rsi_, tsi_) => rsi_ < rsiOB_Dynamic and tsi_ < -tsiThreshold_Dynamic
+strongMomentum_LongCondition(mom_)       => mom_ > tsiThreshold_Dynamic
+strongMomentum_ShortCondition(mom_)      => mom_ < -tsiThreshold_Dynamic
+
+momentumLongCondition  = useCompositeMomentum ? strongMomentum_LongCondition(compositeMomentum)  : strongRSI_TSI_LongCondition(rsi, tsi_value)
+momentumShortCondition = useCompositeMomentum ? strongMomentum_ShortCondition(compositeMomentum) : strongRSI_TSI_ShortCondition(rsi, tsi_value)
+
+// === Kill Switch: fixed $ cap ===
+maxLossPerTrade = baseCapitalForKill * perTradeLossPercent / 100.0
+
+// === Entry Conditions ===
+atrOffset   = smoothedATR * 0.4
+isUptrend   = close > emaLongValue + atrOffset and (not useVWMA or close > vwmaValue)
+isDowntrend = close < emaLongValue - atrOffset and (not useVWMA or close < vwmaValue)
+longRetest  = ta.lowest(low, retestLookback) < emaLongValue and close > emaLongValue
+shortRetest = ta.highest(high, retestLookback) > emaLongValue and close < emaLongValue
+
+// Volatility Logic
+volatilityCondition = (not useVIX) or (vixAvailable and vixRaw < vixThreshold)
+
+longCondition  = longRetest and isUptrend and momentumLongCondition and momValue > 0 and validVolume and volatilityCondition
+shortCondition = shortRetest and isDowntrend and momentumShortCondition and momValue < 0 and validVolume and volatilityCondition
+
+// === Stops/Targets ===
+stopAdjust         = math.min(1.25, 1 + (volatilityFactor * 0.25))
+profitAdjust       = math.min(1.5,  1 + (volatilityFactor * 0.25))
+adjustedStopLoss   = math.min(5 * smoothedATR, stopLossATR * smoothedATR * stopAdjust)
+adjustedTakeProfit = takeProfitATR * smoothedATR * profitAdjust
+
+// === Entries + NORMAL exit only (ATR/TP/Trail). KILL exit handled separately and updated every bar. ===
+if barstate.isconfirmed and not na(smoothedATR) and bar_index > atrLength
+    if longCondition
+        strategy.entry("Long", strategy.long, comment="Long")
+
+        baseStopLong = close - adjustedStopLoss
+        strategy.exit("Long Exit", "Long", stop=round_to_tick(baseStopLong), limit=round_to_tick(close + adjustedTakeProfit), trail_price=round_to_tick(close + (trailActivationATR * smoothedATR)), trail_offset=trailOffsetATR * smoothedATR, comment="Exit Long")
+
+    if shortCondition
+        strategy.entry("Short", strategy.short, comment="Short")
+
+        baseStopShort = close + adjustedStopLoss
+        strategy.exit("Short Exit", "Short", stop=round_to_tick(baseStopShort), limit=round_to_tick(close - adjustedTakeProfit), trail_price=round_to_tick(close - (trailActivationATR * smoothedATR)), trail_offset=trailOffsetATR * smoothedATR, comment="Exit Short")
+
+// === KILL exits (anchored to actual fill) - only update when stop changes ===
+var float lastKillStopLong  = na
+var float lastKillStopShort = na
+
+if strategy.position_size > 0
+    contractsLive    = math.abs(strategy.position_size)
+    riskPerPointLive = contractsLive * pointValueUsed
+    killPtsLive      = (riskPerPointLive > 0) ? (maxLossPerTrade / riskPerPointLive) : na
+    if not na(killPtsLive)
+        killStopLong = round_to_tick(strategy.position_avg_price - killPtsLive)
+
+        // Only re-issue if stop changed by at least 1 tick
+        if na(lastKillStopLong) or math.abs(killStopLong - lastKillStopLong) >= syminfo.mintick
+            strategy.exit("KILL_LONG", "Long", stop=killStopLong, comment="Kill Long")
+            lastKillStopLong := killStopLong
+
+if strategy.position_size < 0
+    contractsLive    = math.abs(strategy.position_size)
+    riskPerPointLive = contractsLive * pointValueUsed
+    killPtsLive      = (riskPerPointLive > 0) ? (maxLossPerTrade / riskPerPointLive) : na
+    if not na(killPtsLive)
+        killStopShort = round_to_tick(strategy.position_avg_price + killPtsLive)
+
+        // Only re-issue if stop changed by at least 1 tick
+        if na(lastKillStopShort) or math.abs(killStopShort - lastKillStopShort) >= syminfo.mintick
+            strategy.exit("KILL_SHORT", "Short", stop=killStopShort, comment="Kill Short")
+            lastKillStopShort := killStopShort
+
+// Reset trackers when flat (optional but clean)
+if strategy.position_size == 0
+    lastKillStopLong  := na
+    lastKillStopShort := na
+
+
+// === Exit on Trend Reversal ===
+if strategy.position_size != 0
+    isLong = strategy.position_size > 0
+    exitSignal = isLong ? (close < emaLongValue or currentMomentum < -tsiThreshold_Dynamic) : (close > emaLongValue or currentMomentum > tsiThreshold_Dynamic)
+    if exitSignal
+        strategy.close(isLong ? "Long" : "Short", comment=isLong ? "Long Reversal Exit" : "Short Reversal Exit")
+
+// === Visuals ===
+barColor = color.white
+if longCondition
+    barColor := color.green
+else if shortCondition
+    barColor := color.red
+else if isUptrend and currentMomentum > 0 and momValue > 0
+    barColor := color.rgb(24, 245, 4)
+else if isDowntrend and currentMomentum < 0 and momValue < 0
+    barColor := color.rgb(116, 9, 9)
+
+barcolor(barColor)
