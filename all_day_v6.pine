@@ -212,6 +212,11 @@ float adjustedStopLoss   = math.min(5 * safeFloat(smoothedATR, 1), stopLossATR *
 float adjustedTakeProfit = takeProfitATR * safeFloat(smoothedATR, 1) * profitAdjust
 
 // ============================================================================
+// ATR Warmup Check (must be before debug section that uses it)
+// ============================================================================
+bool indicatorsWarmedUp = bar_index > math.max(atrLength, tsiVolatilityLookback, vwmaLength, volLookback, retestLookback) + 5
+
+// ============================================================================
 // PASS 3: Debug Reason Tracking
 // ============================================================================
 var string debugEntryBlockReason = ""
@@ -252,11 +257,6 @@ if enableDebug
     if baseLongSignal and baseShortSignal
         br := br + "MutualExcl "
     debugEntryBlockReason := br == "" ? "None" : br
-
-// ============================================================================
-// ATR Warmup Check
-// ============================================================================
-bool indicatorsWarmedUp = bar_index > math.max(atrLength, tsiVolatilityLookback, vwmaLength, volLookback, retestLookback) + 5
 
 // ============================================================================
 // Entry Logic (PASS 1: With all guards)
